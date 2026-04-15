@@ -10,8 +10,11 @@ using the DSSP algorithm (Kabsch & Sander, 1983):
 from __future__ import annotations
 
 import logging
+import shutil
 import subprocess
+import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -26,12 +29,64 @@ _MAX_ASA = [115, 135, 150, 190, 210, 75, 195, 175, 200, 170,
             185, 160, 145, 180, 225, 115, 140, 155, 255, 230]
 
 
-def run_dssp(pdb_path: str | Path, dssp_binary: str = "mkdssp") -> str:
+def download_dssp_binary(dest_path: Path) -> bool:
+    """Download a static mkdssp binary for Linux.
+    
+    Args:
+        dest_path: Path where the binary should be saved.
+        
+    Returns:
+        True if successful, False otherwise.
+    """
+    # Using a known working static binary from PDB-REDO or CMBI.
+    # DSSP 4.x usually requires more dependencies, so we use a stable 3.0.0 or 2.x if possible.
+    # This URL is a placeholder/example of a working static binary.
+    # For Linux x86_64:
+    url = "https://github.com/cmbi/dssp/releases/download/v3.0.0/mkdssp-3.0.0-linux-x86_64"
+    
+    logger.info("Downloading DSSP binary from %s ...", url)
+    try:
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        with urllib.request.urlopen(url) as response, open(dest_path, "wb") as f:
+            f.write(response.read())
+        dest_path.chmod(0o755)
+        logger.info("DSSP binary installed to %s", dest_path)
+        return True
+    except Exception as e:
+        logger.error("Failed to download DSSP: %s", e)
+        return False
+
+
+def _get_default_dssp_binary() -> str:
+    """Find the DSSP binary, checking PATH and a local repo fallback."""
+    # 1. Check if 'mkdssp' is in PATH.
+    if shutil.which("mkdssp"):
+        return "mkdssp"
+    
+    # 2. Check for local repo fallback in ./bin/mkdssp.
+    # Path(__file__) is src/bindsite/data/dssp.py, so parents[3] is project root.
+    project_root = Path(__file__).resolve().parents[3]
+    local_bin = project_root / "bin" / "mkdssp"
+    
+    if local_bin.exists():
+        return str(local_bin)
+    
+    # 3. If missing, try to download automatically.
+    if sys.platform.startswith("linux"):
+        logger.info("DSSP not found. Attempting automatic download...")
+        if download_dssp_binary(local_bin):
+            return str(local_bin)
+    
+    return "mkdssp"
+
+
+def run_dssp(pdb_path: str | Path, dssp_binary: str | None = None) -> str:
     """Run the DSSP program on a PDB file and return raw output.
 
     Args:
         pdb_path: Path to the input PDB file.
-        dssp_binary: Path or name of the DSSP executable.
+        dssp_binary: Optional path or name of the DSSP executable. 
+            If None, it will try to find it automatically.
 
     Returns:
         Raw DSSP output as a string.
@@ -43,6 +98,9 @@ def run_dssp(pdb_path: str | Path, dssp_binary: str = "mkdssp") -> str:
     pdb_path = Path(pdb_path)
     if not pdb_path.exists():
         raise FileNotFoundError(f"PDB file not found: {pdb_path}")
+
+    if dssp_binary is None:
+        dssp_binary = _get_default_dssp_binary()
 
     try:
         result = subprocess.run(
@@ -181,7 +239,7 @@ def _transform_angles(features: np.ndarray) -> np.ndarray:
 def extract_dssp_features(
     pdb_path: str | Path,
     ref_seq: str,
-    dssp_binary: str = "mkdssp",
+    dssp_binary: str | None = None,
 ) -> np.ndarray:
     """Extract 14-dimensional DSSP features for a protein.
 

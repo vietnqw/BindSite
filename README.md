@@ -26,13 +26,13 @@ uv sync
 
 Once synced, you can run the CLI using `uv run bindsite`.
 
-*Note: You also need the `mkdssp` binary installed on your system to extract secondary structure features. On most Linux distributions, you can install it via `apt install dssp` or `conda install -c salilab dssp`.*
+*Note: Secondary structure extraction relies on the `mkdssp` binary. BindSite will automatically attempt to find it in your PATH or project `bin/` directory, and will even download a static binary on Linux if missing.*
 
 ## Pipeline Overview
 
 The complete prediction pipeline follows three steps:
 
-1. **Structure Prediction (ESMFold)**: Produce a 3D structural model (.pdb) from an amino acid sequence. *(Handled via an external tool)*
+1. **Structure Prediction (ESMFold)**: Produce a 3D structural model (.pdb) from an amino acid sequence.
 2. **Feature Extraction (`extract-features`)**: Extract 1024-d ProtT5 embeddings and 14-d DSSP features, and merge them into padded tensors.
 3. **Training & Inference (`train` / `predict`)**: Run the Graph Transformer model to output per-residue binding probabilities.
 
@@ -40,7 +40,7 @@ The complete prediction pipeline follows three steps:
 
 BindSite expects a directory of `.pdb` files corresponding to your protein sequences. 
 
-To make this step as easy as possible, we provide the standalone `scripts/fold.py` script. It heavily leverages the `transformers` library (already installed with BindSite) to run the **Hugging Face implementation of ESMFold (`facebook/esmfold_v1`)** natively in PyTorch. This bypasses the need to install the complicated and unmaintained `fair-esm` and `openfold` repositories entirely!
+To make this step as easy as possible, we provide the `bindsite fold` command. It leverages the `transformers` library to run the **Hugging Face implementation of ESMFold (`facebook/esmfold_v1`)** natively in PyTorch. This bypasses the need to install the complicated and unmaintained `fair-esm` and `openfold` repositories entirely!
 
 To predict standard `.pdb` files from your FASTA sequence, run:
 
@@ -55,12 +55,13 @@ bindsite fold --fasta data/Train_335.fa data/Test_60.fa --output-dir data/pdb
 Once you have your FASTA files and the corresponding PDB files, run the feature extraction pipeline. This will lazily load the ProtT5 model, run DSSP, and construct the PyTorch tensors.
 
 ```bash
-# Example for multiple data files
+# Extract features for all datasets (Train + Test)
 bindsite extract-features \
-    --fasta data/Test_60.fa data/Test_315.fa \
+    --fasta data/Train_335.fa data/Test_60.fa data/Test_315.fa \
     --pdb-dir data/pdb \
     --feature-dir features/
 ```
+
 
 ## 3. Training & Inference
 

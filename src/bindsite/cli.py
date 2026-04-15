@@ -326,7 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_extract.add_argument("--pdb-dir", required=True, help="Directory with PDB files")
     p_extract.add_argument("--feature-dir", default="./features", help="Output feature directory")
     p_extract.add_argument("--protrans-model", default="Rostlab/prot_t5_xl_uniref50")
-    p_extract.add_argument("--dssp-binary", default="mkdssp", help="DSSP executable")
+    p_extract.add_argument("--dssp-binary", default=None, help="DSSP executable (defaults to auto-discovery)")
     p_extract.add_argument("--norm-stats", default=None, help="Path to normalization stats .npz")
     p_extract.add_argument("--device", default=None, help="Device (e.g., cuda:0)")
     p_extract.add_argument("--max-len", type=int, default=1000, help="Max sequence length")
