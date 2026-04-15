@@ -13,16 +13,18 @@ It leverages structure-aware Graph Transformers, ESMFold-predicted structures, a
 
 ## Installation
 
-This project uses [`uv`](https://github.com/astral-sh/uv) as its package manager.
+This project uses [`uv`](https://github.com/astral-sh/uv) for lightning-fast dependency management.
 
 ```bash
 # Clone the repository
 git clone https://your-repo/bindsite.git
 cd bindsite
 
-# Install dependencies and the package in editable mode
-uv pip install -e .
+# Sync the project (creates .venv and installs all dependencies + bindsite)
+uv sync
 ```
+
+Once synced, you can run the CLI using `uv run bindsite`.
 
 *Note: You also need the `mkdssp` binary installed on your system to extract secondary structure features. On most Linux distributions, you can install it via `apt install dssp` or `conda install -c salilab dssp`.*
 

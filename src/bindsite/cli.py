@@ -29,6 +29,42 @@ def _setup_logging(verbose: bool = False) -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+
+def check_cuda_environment() -> None:
+    """Gracefully detect and warn if a system has a GPU but PyTorch can't use it."""
+    import torch
+    
+    if torch.cuda.is_available():
+        return
+
+    # Check if there is an NVIDIA GPU present using nvidia-smi
+    import subprocess
+    logger = logging.getLogger(__name__)
+    
+    try:
+        subprocess.run(
+            ["nvidia-smi"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True
+        )
+        # If nvidia-smi ran successfully but PyTorch CUDA isn't available, mismatched driver!
+        logger.error("-" * 80)
+        logger.error("CRITICAL GPU DRIVER WARNING !!!")
+        logger.error(
+            "Your system has an NVIDIA GPU, but PyTorch running inside 'uv' cannot detect it.\n"
+            "This happens because PyTorch installed the newest CUDA binary, but your host\n"
+            "NVIDIA Driver is older and incompatible."
+        )
+        logger.error(
+            "To fix this gracefully without changing code, run the following command to\n"
+            "install PyTorch compiled for a slightly older CUDA version (e.g. 12.1):\n"
+            "\n"
+            "    uv pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121"
+            "\n"
+        )
+        logger.error("-" * 80)
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        # No GPU found (or nvidia-smi not installed). Safe to silently fall back to CPU
+        pass
+
 # --------------------------------------------------------------------------- #
 #  Subcommand: fold
 # --------------------------------------------------------------------------- #
@@ -336,6 +372,9 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     _setup_logging(getattr(args, "verbose", False))
+    
+    check_cuda_environment()
+    
     args.func(args)
 
 
