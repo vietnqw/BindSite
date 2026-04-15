@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_esmfold(
-    fasta_path: str | Path,
+    fasta_path: str | Path | list[str | Path],
     output_dir: str | Path,
     device: str | None = None,
     chunk_size: int = 64,
@@ -26,7 +26,7 @@ def run_esmfold(
     """Predict PDB structures for proteins in a FASTA file using ESMFold.
 
     Args:
-        fasta_path: Path to the input FASTA file.
+        fasta_path: Path(s) to the input FASTA file(s).
         output_dir: Directory to save the predicted .pdb files.
         device: Device to run the model on (e.g., 'cuda:0', 'cpu').
         chunk_size: Processing chunk size for attention to save VRAM.
@@ -36,10 +36,14 @@ def run_esmfold(
     
     device = device or ("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load sequences using the standard parser.
-    records = parse_fasta(fasta_path)
+    # Load sequences using the standard parser (handling single or multiple files).
+    paths = [fasta_path] if isinstance(fasta_path, (str, Path)) else fasta_path
+    records = []
+    for p in paths:
+        records.extend(parse_fasta(p))
+        
     sequences = {r.id: r.sequence for r in records}
-    logger.info("Loaded %d sequences from %s", len(sequences), fasta_path)
+    logger.info("Loaded %d sequences from %s", len(sequences), paths)
 
     # Filter out already predicted proteins.
     remaining = {

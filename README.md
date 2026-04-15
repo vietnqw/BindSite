@@ -45,9 +45,9 @@ To make this step as easy as possible, we provide the standalone `scripts/fold.p
 To predict standard `.pdb` files from your FASTA sequence, run:
 
 ```bash
-# Fold the entire dataset. It will automatically download the ESMFold weights
+# Fold one or more datasets. It will automatically download the ESMFold weights
 # and use memory-efficient chunking to fit long sequences onto standard GPUs!
-bindsite fold --fasta data/Train_335.fa --output-dir data/pdb
+bindsite fold --fasta data/Train_335.fa data/Test_60.fa --output-dir data/pdb
 ```
 
 ## 2. Feature Extraction
@@ -55,9 +55,9 @@ bindsite fold --fasta data/Train_335.fa --output-dir data/pdb
 Once you have your FASTA files and the corresponding PDB files, run the feature extraction pipeline. This will lazily load the ProtT5 model, run DSSP, and construct the PyTorch tensors.
 
 ```bash
-# Example for a subset of data
+# Example for multiple data files
 bindsite extract-features \
-    --fasta data/Train_335.fa \
+    --fasta data/Test_60.fa data/Test_315.fa \
     --pdb-dir data/pdb \
     --feature-dir features/
 ```
@@ -68,11 +68,11 @@ The CLI provides subcommands for preparing data splits, training, and predicting
 
 ### Generate CSV Manifests
 
-Convert the raw FASTA files (which may contain inline binary labels in a 3-line format) into CSVs for the DataLoader:
+Convert the raw FASTA files (which may contain inline binary labels in a 3-line format) into CSVs for the DataLoader. You can provide multiple FASTA files to combine them into a single manifest:
 
 ```bash
-bindsite generate-csv --fasta data/Train_335.fa --output data/PRO_train.csv
-bindsite generate-csv --fasta data/Test_60.fa --output data/PRO_test60.csv
+# Combine two test sets into a single evaluation CSV
+bindsite generate-csv --fasta data/Test_60.fa data/Test_315.fa --output data/PRO_test_combined.csv
 ```
 
 ### Training

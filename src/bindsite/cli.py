@@ -101,9 +101,13 @@ def cmd_extract_features(args: argparse.Namespace) -> None:
     for d in [raw_emb_dir, norm_emb_dir, dssp_dir, tensor_dir]:
         d.mkdir(parents=True, exist_ok=True)
 
-    records = parse_fasta(args.fasta)
+    records = []
+    fasta_paths = [args.fasta] if isinstance(args.fasta, str) else args.fasta
+    for p in fasta_paths:
+        records.extend(parse_fasta(p))
+        
     sequences = {r.id: r.sequence for r in records}
-    logging.info("Loaded %d sequences from %s", len(records), args.fasta)
+    logging.info("Loaded %d sequences from %s", len(records), fasta_paths)
 
     # Step 1: ProtT5 embeddings.
     logging.info("Step 1/4: Extracting ProtT5 embeddings...")
@@ -172,7 +176,11 @@ def cmd_generate_csv(args: argparse.Namespace) -> None:
     """Generate a CSV file from a FASTA file for training/testing."""
     from bindsite.data.fasta import parse_fasta
 
-    records = parse_fasta(args.fasta)
+    fasta_paths = [args.fasta] if isinstance(args.fasta, str) else args.fasta
+    records = []
+    for p in fasta_paths:
+        records.extend(parse_fasta(p))
+    
     rows = []
     for r in records:
         row = {"ID": r.id, "sequence": r.sequence}
@@ -182,7 +190,7 @@ def cmd_generate_csv(args: argparse.Namespace) -> None:
 
     df = pd.DataFrame(rows)
     df.to_csv(args.output, index=False)
-    logging.info("Saved %d records to %s", len(df), args.output)
+    logging.info("Saved %d records from %s to %s", len(df), fasta_paths, args.output)
 
 
 # --------------------------------------------------------------------------- #
@@ -303,7 +311,7 @@ def build_parser() -> argparse.ArgumentParser:
         "fold",
         help="Predict 3D structures from sequences using HF ESMFold",
     )
-    p_fold.add_argument("--fasta", required=True, help="Input FASTA file")
+    p_fold.add_argument("--fasta", nargs="+", required=True, help="Input FASTA file(s)")
     p_fold.add_argument("--output-dir", required=True, help="Output directory for PDBs")
     p_fold.add_argument("--device", default=None, help="Device (e.g., cuda:0)")
     p_fold.add_argument("--chunk-size", type=int, default=64, help="Attention chunk size for VRAM saving")
@@ -314,7 +322,7 @@ def build_parser() -> argparse.ArgumentParser:
         "extract-features",
         help="Extract ProtT5 + DSSP features from FASTA + PDB files",
     )
-    p_extract.add_argument("--fasta", required=True, help="Input FASTA file")
+    p_extract.add_argument("--fasta", nargs="+", required=True, help="Input FASTA file(s)")
     p_extract.add_argument("--pdb-dir", required=True, help="Directory with PDB files")
     p_extract.add_argument("--feature-dir", default="./features", help="Output feature directory")
     p_extract.add_argument("--protrans-model", default="Rostlab/prot_t5_xl_uniref50")
@@ -329,7 +337,7 @@ def build_parser() -> argparse.ArgumentParser:
         "generate-csv",
         help="Generate train/test CSV from FASTA file",
     )
-    p_csv.add_argument("--fasta", required=True, help="Input FASTA file")
+    p_csv.add_argument("--fasta", nargs="+", required=True, help="Input FASTA file(s)")
     p_csv.add_argument("--output", required=True, help="Output CSV file")
     p_csv.set_defaults(func=cmd_generate_csv)
 
