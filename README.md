@@ -36,14 +36,16 @@ The complete prediction pipeline follows three steps:
 
 ## 1. Structure Prediction (ESMFold)
 
-BindSite expects a directory of `.pdb` files corresponding to your protein sequences. Because ESMFold has heavyweight and complex dependencies (like `openfold`), it is **not** included as a direct project dependency.
+BindSite expects a directory of `.pdb` files corresponding to your protein sequences. 
 
-You can generate PDBs using the official [ESMFold script](https://github.com/facebookresearch/esm) or any public API (like the ESM Metagenomic Atlas API).
+To make this step as easy as possible, we provide the standalone `scripts/fold.py` script. It heavily leverages the `transformers` library (already installed with BindSite) to run the **Hugging Face implementation of ESMFold (`facebook/esmfold_v1`)** natively in PyTorch. This bypasses the need to install the complicated and unmaintained `fair-esm` and `openfold` repositories entirely!
 
-A sample script is provided in `scripts/fold.py` if you have `fair-esm` installed in a standalone environment:
+To predict standard `.pdb` files from your FASTA sequence, run:
+
 ```bash
-# In an environment with fair-esm[esmfold] installed:
-python scripts/fold.py --fasta data/Train_335.fa --output-dir data/pdb --cpu-offload
+# Fold the entire dataset. It will automatically download the ESMFold weights
+# and use memory-efficient chunking to fit long sequences onto standard GPUs!
+python scripts/fold.py --fasta data/Train_335.fa --output-dir data/pdb
 ```
 
 ## 2. Feature Extraction
