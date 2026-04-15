@@ -45,7 +45,7 @@ To predict standard `.pdb` files from your FASTA sequence, run:
 ```bash
 # Fold the entire dataset. It will automatically download the ESMFold weights
 # and use memory-efficient chunking to fit long sequences onto standard GPUs!
-python scripts/fold.py --fasta data/Train_335.fa --output-dir data/pdb
+bindsite fold --fasta data/Train_335.fa --output-dir data/pdb
 ```
 
 ## 2. Feature Extraction

@@ -1,6 +1,7 @@
 """Command-line interface for BindSite.
 
 Provides subcommands for the full pipeline:
+  - fold:              Predict 3D structures from sequences using ESMFold
   - extract-features:  Extract ProtT5 + DSSP features from FASTA + PDB files
   - train:             Train the Graph Transformer model with K-fold CV
   - predict:           Run inference with trained model ensemble
@@ -28,6 +29,18 @@ def _setup_logging(verbose: bool = False) -> None:
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 
+# --------------------------------------------------------------------------- #
+#  Subcommand: fold
+# --------------------------------------------------------------------------- #
+def cmd_fold(args: argparse.Namespace) -> None:
+    """Run ESMFold to predict PDB structures from FASTA sequences."""
+    from bindsite.data.fold import run_esmfold
+    run_esmfold(
+        fasta_path=args.fasta,
+        output_dir=args.output_dir,
+        device=args.device,
+        chunk_size=args.chunk_size,
+    )
 
 # --------------------------------------------------------------------------- #
 #  Subcommand: extract-features
@@ -248,6 +261,17 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable debug logging")
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    # --- fold ---
+    p_fold = subparsers.add_parser(
+        "fold",
+        help="Predict 3D structures from sequences using HF ESMFold",
+    )
+    p_fold.add_argument("--fasta", required=True, help="Input FASTA file")
+    p_fold.add_argument("--output-dir", required=True, help="Output directory for PDBs")
+    p_fold.add_argument("--device", default=None, help="Device (e.g., cuda:0)")
+    p_fold.add_argument("--chunk-size", type=int, default=64, help="Attention chunk size for VRAM saving")
+    p_fold.set_defaults(func=cmd_fold)
 
     # --- extract-features ---
     p_extract = subparsers.add_parser(

@@ -10,7 +10,9 @@ wheels/
 .venv
 
 # Local reference code (original DeepProSite)
-local/
+/local/
 
 # Data files (large, tracked separately)
-data/
+/data/
+/features/
+/output/
