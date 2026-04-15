@@ -18,6 +18,9 @@ dependencies = [
     "transformers>=4.30",
 ]
 
+[project.scripts]
+bindsite = "bindsite.cli:main"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
