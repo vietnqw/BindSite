@@ -54,7 +54,7 @@ class TrainingConfig:
     task: str = "PRO"
     epochs: int = 30
     patience: int = 8
-    batch_size: int = 32
+    batch_size: int = 64
     n_folds: int = 5
     seed: int = 42
     max_seq_len: int = 1000

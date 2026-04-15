@@ -238,7 +238,10 @@ class Trainer:
                 warmup_epochs=cfg.warmup_epochs,
                 peak_lr=cfg.peak_lr,
             )
-            loss_fn = nn.BCEWithLogitsLoss(reduction="none")
+            # Use weighted BCE loss to handle class imbalance (approx 1:5 ratio).
+            # pos_weight = (1 - 0.156) / 0.156 approx 5.4
+            pos_weight = torch.tensor([5.4], device=self.device)
+            loss_fn = nn.BCEWithLogitsLoss(reduction="none", pos_weight=pos_weight)
 
             best_auprc = 0.0
             patience_counter = 0

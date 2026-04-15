@@ -33,6 +33,7 @@ class MetricsResult:
     auc_roc: float
     auprc: float
     mcc: float
+    accuracy: float
     precision: float
     recall: float
     specificity: float
@@ -42,6 +43,7 @@ class MetricsResult:
             f"AUC-ROC: {self.auc_roc:.4f} | "
             f"AUPRC: {self.auprc:.4f} | "
             f"MCC: {self.mcc:.4f} | "
+            f"ACC: {self.accuracy:.4f} | "
             f"Precision: {self.precision:.4f} | "
             f"Recall: {self.recall:.4f} | "
             f"Specificity: {self.specificity:.4f}"
@@ -87,14 +89,17 @@ def compute_metrics(
 
     # Matthews Correlation Coefficient.
     denom = np.sqrt(
-        float((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+        float(tp + fp) * float(tp + fn) * float(tn + fp) * float(tn + fn)
     )
     mcc = float(tp * tn - fn * fp) / denom if denom > 0 else 0.0
+
+    accuracy = (tp + tn) / (tp + tn + fp + fn)
 
     return MetricsResult(
         auc_roc=float(auc_roc),
         auprc=float(auprc),
         mcc=mcc,
+        accuracy=accuracy,
         precision=precision,
         recall=recall,
         specificity=specificity,

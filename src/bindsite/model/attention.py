@@ -106,28 +106,34 @@ class NeighborAttention(nn.Module):
         d = self.head_dim
 
         # Project queries from nodes, keys/values from edge+neighbor features.
-        Q = self.W_Q(h_V).reshape(B, N, 1, H, 1, d)
-        K = self.W_K(h_E).reshape(B, N, K, H, d, 1)
-        V = self.W_V(h_E).reshape(B, N, K, H, d)
+        queries = self.W_Q(h_V).reshape(B, N, 1, H, 1, d)
+        keys = self.W_K(h_E).reshape(B, N, K, H, d, 1)
+        values = self.W_V(h_E).reshape(B, N, K, H, d)
 
         # Scaled dot-product attention: (B, N, K, H).
-        attn_logits = torch.matmul(Q, K).reshape(B, N, K, H)
+        attn_logits = torch.matmul(queries, keys).reshape(B, N, K, H)
         attn_logits = attn_logits.transpose(-2, -1)  # (B, N, H, K)
         attn_logits = attn_logits / (d ** 0.5)
 
         if mask_attend is not None:
             mask = mask_attend.unsqueeze(2).expand(-1, -1, H, -1)  # (B, N, H, K)
-            attn_logits = attn_logits.masked_fill(mask == 0, torch.finfo(attn_logits.dtype).min)
+            # Use a slightly less extreme value than finfo.min to avoid numerical instability
+            # while still effectively zeroing out the attention weights.
+            attn_logits = attn_logits.masked_fill(mask == 0, -1e9)
 
         attn_weights = F.softmax(attn_logits, dim=-1)  # (B, N, H, K)
 
+        # Numerical stability: if all neighbors were masked, softmax might produce NaNs.
+        # While this theoretically only happens for padding nodes (which we mask out later),
+        # it's safer to zero them here.
         if mask_attend is not None:
             attn_weights = attn_weights * mask
+            attn_weights = torch.nan_to_num(attn_weights)
 
         # Weighted aggregation: (B, N, H, 1, K) @ (B, N, H, K, d) -> (B, N, H, 1, d)
-        V_transposed = V.transpose(2, 3)  # (B, N, H, K, d)
+        values_transposed = values.transpose(2, 3)  # (B, N, H, K, d)
         h_update = torch.matmul(
-            attn_weights.unsqueeze(-2), V_transposed
+            attn_weights.unsqueeze(-2), values_transposed
         )  # (B, N, H, 1, d)
         h_update = h_update.reshape(B, N, self.hidden_dim)
 
