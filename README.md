@@ -71,8 +71,11 @@ The CLI provides subcommands for preparing data splits, training, and predicting
 Convert the raw FASTA files (which may contain inline binary labels in a 3-line format) into CSVs for the DataLoader. You can provide multiple FASTA files to combine them into a single manifest:
 
 ```bash
-# Combine two test sets into a single evaluation CSV
-bindsite generate-csv --fasta data/Test_60.fa data/Test_315.fa --output data/PRO_test_combined.csv
+# 1. Training manifest
+bindsite generate-csv --fasta data/Train_335.fa --output data/PRO_train.csv
+
+# 2. Test manifest 
+bindsite generate-csv --fasta data/Test_60.fa data/Test_315.fa --output data/PRO_test.csv
 ```
 
 ### Training
