@@ -1,0 +1,30 @@
+[project]
+name = "bindsite"
+version = "0.1.0"
+description = "Binding site prediction project"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "biopython>=1.87",
+    "numpy>=2.2.6",
+    "pandas>=2.3.3",
+    "scikit-learn>=1.7.2",
+    "sentencepiece>=0.2.1",
+    "torch>=2.2.0",
+    "tqdm>=4.66.5",
+    "transformers>=5.5.4",
+    "typer>=0.15.2",
+]
+
+[project.scripts]
+bindsite = "bindsite.cli:app"
+
+[tool.uv]
+package = true
+
+[[tool.uv.index]]
+url = "https://download.pytorch.org/whl/cu121"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
