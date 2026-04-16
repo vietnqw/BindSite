@@ -25,7 +25,10 @@ from tqdm import tqdm
 from bindsite.config import ModelConfig, TrainingConfig
 from bindsite.data.dataset import create_dataloader
 from bindsite.model.graph_transformer import GraphTransformer
-from bindsite.model.scheduler import create_optimizer_and_scheduler
+from bindsite.model.scheduler import (
+    create_modern_optimizer_and_scheduler,
+    # create_optimizer_and_scheduler,
+)
 from bindsite.training.metrics import MetricsResult, compute_metrics
 
 logger = logging.getLogger(__name__)
@@ -43,6 +46,47 @@ def seed_everything(seed: int) -> None:
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
+
+
+class FocalLoss(nn.Module):
+    """Focal Loss for imbalanced binary classification.
+
+    FL(p_t) = -alpha * (1 - p_t)^gamma * log(p_t)
+    where p_t is the probability of the true class.
+    """
+
+    def __init__(
+        self,
+        gamma: float = 2.0,
+        pos_weight: torch.Tensor | None = None,
+        reduction: str = "mean",
+    ) -> None:
+        super().__init__()
+        self.gamma = gamma
+        self.pos_weight = pos_weight
+        self.reduction = reduction
+
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        """Compute Focal Loss."""
+        # Standard BCE loss with weights.
+        bce_loss = nn.functional.binary_cross_entropy_with_logits(
+            inputs, targets, pos_weight=self.pos_weight, reduction="none"
+        )
+        
+        # Compute p_t.
+        probs = torch.sigmoid(inputs)
+        p_t = targets * probs + (1 - targets) * (1 - probs)
+        
+        # Compute Focal factor.
+        focal_factor = (1 - p_t) ** self.gamma
+        
+        loss = focal_factor * bce_loss
+        
+        if self.reduction == "mean":
+            return loss.mean()
+        if self.reduction == "sum":
+            return loss.sum()
+        return loss
 
 
 class Trainer:
@@ -130,6 +174,9 @@ class Trainer:
             loss = loss_fn(logits, labels) * mask.float()
             loss = loss.sum() / mask.sum()
             loss.backward()
+
+            # Gradient clipping to prevent exploding gradients.
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             optimizer.step()
             scheduler.step()
@@ -229,19 +276,22 @@ class Trainer:
 
             # Create model, optimizer, scheduler.
             model = self._create_model()
-            train_size = cfg._train_sizes.get(cfg.task, 335)
-            optimizer, scheduler = create_optimizer_and_scheduler(
+            
+            # Use the modern optimizer (AdamW + OneCycleLR).
+            optimizer, scheduler = create_modern_optimizer_and_scheduler(
                 model,
-                d_model=self.model_config.hidden_dim,
-                train_size=train_size,
+                train_size=cfg.num_samples_per_epoch,
+                epochs=cfg.epochs,
                 batch_size=cfg.batch_size,
-                warmup_epochs=cfg.warmup_epochs,
                 peak_lr=cfg.peak_lr,
+                weight_decay=cfg.weight_decay,
             )
-            # Use weighted BCE loss to handle class imbalance (approx 1:5 ratio).
-            # pos_weight = (1 - 0.156) / 0.156 approx 5.4
+            
+            # Use Focal Loss with weighted BCE to handle class imbalance.
             pos_weight = torch.tensor([5.4], device=self.device)
-            loss_fn = nn.BCEWithLogitsLoss(reduction="none", pos_weight=pos_weight)
+            loss_fn = FocalLoss(
+                gamma=cfg.focal_gamma, pos_weight=pos_weight, reduction="none"
+            )
 
             best_auprc = 0.0
             patience_counter = 0
@@ -249,8 +299,10 @@ class Trainer:
 
             for epoch in range(cfg.epochs):
                 # Train.
+                # Note: Labels are smoothed before passing to loss
+                smoothed_train_loader = self._wrap_loader_with_smoothing(train_loader, cfg.label_smoothing)
                 train_loss, train_metrics = self._train_one_epoch(
-                    model, train_loader, optimizer, scheduler, loss_fn
+                    model, smoothed_train_loader, optimizer, scheduler, loss_fn
                 )
 
                 # Validate.
@@ -298,3 +350,17 @@ class Trainer:
             )
 
         return all_fold_metrics
+
+    def _wrap_loader_with_smoothing(self, loader, smoothing):
+        """Yield batches with smoothed labels."""
+        if smoothing == 0:
+            for batch in loader:
+                yield batch
+            return
+
+        for batch in loader:
+            labels = batch["label"]
+            # Smooth: 0 -> smoothing/2, 1 -> 1 - smoothing/2
+            labels = labels * (1.0 - smoothing) + 0.5 * smoothing
+            batch["label"] = labels
+            yield batch

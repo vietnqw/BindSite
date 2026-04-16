@@ -8,8 +8,8 @@ the original DeepProSite training.
 from __future__ import annotations
 
 import torch
-from torch.optim import Adam
-from torch.optim.lr_scheduler import LambdaLR
+from torch.optim import Adam, AdamW
+from torch.optim.lr_scheduler import LambdaLR, OneCycleLR
 
 
 def create_noam_scheduler(
@@ -82,5 +82,48 @@ def create_optimizer_and_scheduler(
     warmup_steps = warmup_epochs * steps_per_epoch
 
     scheduler = create_noam_scheduler(optimizer, d_model, warmup_steps, peak_lr)
+
+    return optimizer, scheduler
+
+
+def create_modern_optimizer_and_scheduler(
+    model: torch.nn.Module,
+    train_size: int,
+    epochs: int,
+    batch_size: int = 32,
+    peak_lr: float = 5e-4,
+    weight_decay: float = 1e-2,
+) -> tuple[AdamW, OneCycleLR]:
+    """Create an AdamW optimizer with OneCycleLR schedule.
+
+    Args:
+        model: The model whose parameters to optimize.
+        train_size: Number of proteins in the training set (or num_samples_per_epoch).
+        epochs: Total number of training epochs.
+        batch_size: Training batch size.
+        peak_lr: Maximum learning rate.
+        weight_decay: Weight decay factor.
+
+    Returns:
+        Tuple of (optimizer, scheduler).
+    """
+    optimizer = AdamW(
+        model.parameters(),
+        lr=peak_lr,
+        weight_decay=weight_decay,
+    )
+
+    steps_per_epoch = max(1, train_size // batch_size)
+    total_steps = epochs * steps_per_epoch
+
+    scheduler = OneCycleLR(
+        optimizer,
+        max_lr=peak_lr,
+        total_steps=total_steps,
+        pct_start=0.1,  # 10% warmup
+        anneal_strategy="cos",
+        div_factor=10.0,
+        final_div_factor=100.0,
+    )
 
     return optimizer, scheduler

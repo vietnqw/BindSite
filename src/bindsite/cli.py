@@ -264,6 +264,21 @@ def cmd_predict(args: argparse.Namespace) -> None:
     logging.info("Saved predictions to %s", args.output)
 
 
+def smooth_probabilities(probs: np.ndarray, window_size: int = 3) -> np.ndarray:
+    """Apply a simple moving average to smooth residue probabilities.
+    
+    Helps remove isolated false positives and bridges small gaps in clusters.
+    """
+    if window_size <= 1:
+        return probs
+    
+    pad = window_size // 2
+    padded = np.pad(probs, pad, mode="edge")
+    smoothed = np.convolve(padded, np.ones(window_size)/window_size, mode="valid")
+    # Ensure we return the same length as input
+    return smoothed[:len(probs)]
+
+
 # --------------------------------------------------------------------------- #
 #  Subcommand: evaluate
 # --------------------------------------------------------------------------- #
@@ -288,9 +303,14 @@ def cmd_evaluate(args: argparse.Namespace) -> None:
         preds = pred_map[pid]
         L = min(len(labels), len(preds))
         all_labels.extend(labels[:L])
-        all_preds.extend(preds[:L])
+        
+        # Apply spatial smoothing if requested
+        p = np.array(preds[:L])
+        if getattr(args, "smooth", 0) > 1:
+            p = smooth_probabilities(p, args.smooth)
+        all_preds.extend(p.tolist())
 
-    metrics = compute_metrics(np.array(all_preds), np.array(all_labels))
+    metrics = compute_metrics(np.array(all_preds), np.array(all_labels), threshold=args.threshold)
     print(f"\nEvaluation Results:\n{metrics}")
 
 
@@ -370,6 +390,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_eval = subparsers.add_parser("evaluate", help="Evaluate predictions")
     p_eval.add_argument("--predictions", required=True, help="Predictions CSV")
     p_eval.add_argument("--ground-truth", required=True, help="Ground truth CSV")
+    p_eval.add_argument("--threshold", type=float, default=0.5, help="Classification threshold")
+    p_eval.add_argument("--smooth", type=int, default=0, help="Smoothing window size (e.g. 3 or 5)")
     p_eval.set_defaults(func=cmd_evaluate)
 
     return parser

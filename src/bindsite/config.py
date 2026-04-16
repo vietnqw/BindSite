@@ -26,7 +26,8 @@ class ModelConfig:
 
     node_features: int = 1038  # 1024 (ProtT5) + 14 (DSSP)
     edge_features: int = 16
-    hidden_dim: int = 64
+    # hidden_dim: int = 64
+    hidden_dim: int = 128
     num_encoder_layers: int = 4
     num_attention_heads: int = 4
     k_neighbors: int = 30
@@ -61,6 +62,9 @@ class TrainingConfig:
     num_workers: int = 4
     peak_lr: float = 4e-4
     warmup_epochs: int = 5
+    weight_decay: float = 1e-2
+    label_smoothing: float = 0.05
+    focal_gamma: float = 2.0
 
     # Dataset sizes used to compute number of samples per epoch.
     # Maps task name -> number of training proteins.

@@ -71,6 +71,11 @@ def compute_metrics(
     predictions = predictions.reshape(-1)
     labels = labels.reshape(-1)
 
+    # Handle label smoothing: if labels are continuous, binarize them for metrics.
+    # sklearn metrics like roc_auc_score require binary labels.
+    if labels.dtype.kind in "fc":  # float or complex
+        labels = (labels > 0.5).astype(int)
+
     if len(predictions) == 0:
         raise ValueError("Cannot compute metrics on empty predictions.")
 
