@@ -44,12 +44,15 @@ def fold(
     model_name: str = typer.Option(
         "facebook/esmfold_v1", help="ESMFold model version to use."
     ),
+    chunk_size: int = typer.Option(
+        128, help="Processing chunk size for attention to save VRAM. Set to 0 to disable."
+    ),
 ):
     """Predict 3D protein structures from FASTA sequences using ESMFold."""
     from bindsite.folding import ESMFolder
     
     typer.echo(f"Starting folding process...")
-    folder = ESMFolder(model_name=model_name)
+    folder = ESMFolder(model_name=model_name, chunk_size=chunk_size)
     folder.fold_fasta(fasta_paths=input_fasta, output_dir=output_dir)
     typer.echo(f"Folding completed. Results saved to {output_dir}")
 

@@ -12,13 +12,14 @@ logger = logging.getLogger(__name__)
 class ESMFolder:
     """Class to handle protein folding using ESMFold."""
 
-    def __init__(self, model_name: str = "facebook/esmfold_v1", device: str = None):
+    def __init__(self, model_name: str = "facebook/esmfold_v1", device: str = None, chunk_size: int = 128):
         """
         Initialize the ESMFold model and tokenizer.
 
         Args:
             model_name: The name or path of the pretrained model.
             device: The device to run the model on ('cuda' or 'cpu').
+            chunk_size: Processing chunk size for attention to save VRAM.
         """
         if device is None:
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -28,6 +29,10 @@ class ESMFolder:
         logger.info(f"Loading {model_name} on {self.device}...")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = EsmForProteinFolding.from_pretrained(model_name)
+        
+        if chunk_size > 0:
+            self.model.trunk.set_chunk_size(chunk_size)
+            
         self.model.to(self.device).eval()
 
     def _parse_fasta(self, fasta_path: Path):
@@ -95,29 +100,32 @@ class ESMFolder:
 
             try:
                 # Clean sequence: ESMFold tokenizer only expects amino acids
-                # Remove any non-alphabetical characters just in case
                 clean_sequence = "".join([c for c in sequence if c.isalpha()]).upper()
+                seq_len = len(clean_sequence)
                 
                 if not clean_sequence:
                     logger.warning(f"Empty sequence for {protein_id}. Skipping.")
                     continue
 
+                logger.debug(f"Folding {protein_id} (length: {seq_len})...")
+
                 with torch.no_grad():
                     inputs = self.tokenizer(clean_sequence, return_tensors="pt", add_special_tokens=False)
-                    inputs = {k: v.to(self.device) for k, v in inputs.items()}
+                    input_ids = inputs["input_ids"].to(self.device)
 
-                    outputs = self.model(**inputs)
+                    outputs = self.model(input_ids)
 
-                    # Fix pLDDT scaling: ESMFold in transformers often outputs 0-1,
-                    # but PDB expects 0-100 for B-factor.
-                    # We check if values are within [0, 1] and scale them.
-                    if outputs.plddt.max() <= 1.0:
-                        outputs.plddt *= 100
+                    # Fix pLDDT scaling: ESMFold outputs 0-1, PDB expects 0-100.
+                    outputs.plddt *= 100
 
                     pdb_strings = self.model.output_to_pdb(outputs)
 
                     with open(output_path, "w") as f:
                         f.write(pdb_strings[0])
 
+            except torch.cuda.OutOfMemoryError:
+                logger.error(f"OOM error for {protein_id} (length: {len(sequence)}). Skipping.")
+                if self.device == "cuda":
+                    torch.cuda.empty_cache()
             except Exception as e:
                 logger.error(f"Error folding {protein_id}: {e}")
