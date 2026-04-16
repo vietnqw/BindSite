@@ -47,7 +47,7 @@ To predict standard `.pdb` files from your FASTA sequence, run:
 ```bash
 # Fold one or more datasets. It will automatically download the ESMFold weights
 # and use memory-efficient chunking to fit long sequences onto standard GPUs!
-bindsite fold --fasta data/Train_335.fa data/Test_60.fa --output-dir data/pdb
+bindsite fold --fasta data/Train_335.fa data/Test_60.fa data/Test_315.fa --output-dir data/pdb
 ```
 
 ## 2. Feature Extraction

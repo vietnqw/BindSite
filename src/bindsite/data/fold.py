@@ -80,7 +80,11 @@ def run_esmfold(
                 
                 output = model(input_ids)
                 
-                # Convert the raw predicted structures to PDB format output
+                # Convert the raw predicted structures to PDB format output.
+                # NOTE: HuggingFace outputs pLDDT in [0, 1] but the Facebook esm
+                # library (used by DeepProSite) outputs it in [0, 100]. We scale
+                # here so downstream DSSP / feature extraction sees correct values.
+                output["plddt"] = output["plddt"] * 100
                 pdb_lines = model.output_to_pdb(output)
                 pdb_str = pdb_lines[0]
                 
