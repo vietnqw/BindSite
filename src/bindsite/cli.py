@@ -1,7 +1,7 @@
 import typer
 
 app = typer.Typer(
-    help="BindSite: A minimal CLI for binding site prediction.",
+    help="BindSite: A tool for training, evaluation, and prediction of protein binding sites inspired by DeepProSite.",
     no_args_is_help=True
 )
 
