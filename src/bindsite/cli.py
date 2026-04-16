@@ -42,10 +42,10 @@ def fold(
         "data/pdb", "--output-dir", "-o", help="Output directory for predicted .pdb files."
     ),
     model_name: str = typer.Option(
-        "facebook/esmfold_v1", help="ESMFold model version to use."
+        "facebook/esmfold_v1", "--model-name", "-m", help="ESMFold model version to use."
     ),
     chunk_size: int = typer.Option(
-        128, help="Processing chunk size for attention to save VRAM. Set to 0 to disable."
+        128, "--chunk-size", "-c", help="Processing chunk size for attention to save VRAM. Set to 0 to disable."
     ),
 ):
     """Predict 3D protein structures from FASTA sequences using ESMFold."""
