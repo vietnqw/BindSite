@@ -1,0 +1,855 @@
+Bioinformatics, 2023, 39(12), btad718
+https://doi.org/10.1093/bioinformatics/btad718
+Advance Access Publication Date: 28 November 2023
+Original Paper
+
+
+
+
+Sequence analysis
+DeepProSite: structure-aware protein binding site
+prediction using ESMFold and pretrained language model
+Yitian Fang 1,2 , Yi Jiang3, Leyi Wei                          4
+                                                                   , Qin Ma3, Zhixiang Ren2, Qianmu Yuan5,*
+Dong-Qing Wei 1,2,*
+1
+  State Key Laboratory of Microbial Metabolism, Shanghai-Islamabad-Belgrade Joint Innovation Center on Antibacterial Resistances, Joint
+International Research Laboratory of Metabolic & Developmental Sciences and School of Life Sciences and Biotechnology, Shanghai Jiao
+Tong University, Shanghai 200040, China
+2
+  Peng Cheng Laboratory, Shenzhen 518055, China
+3
+  Department of Biomedical Informatics, College of Medicine, The Ohio State University, Columbus, OH 43210, USA
+4
+  School of Software, Shandong University, Jinan, Shandong 250100, China
+5
+  School of Computer Science and Engineering, Sun Yat-sen University, Guangzhou 510000, China
+*Corresponding authors. State Key Laboratory of Microbial Metabolism, Shanghai-Islamabad-Belgrade Joint Innovation Center on Antibacterial Resistances,
+Joint International Research Laboratory of Metabolic & Developmental Sciences and School of Life Sciences and Biotechnology, Shanghai Jiao Tong
+University, Shanghai 200040, China. E-mail: dqwei@sjtu.edu.cn (D.-Q.W.); School of Computer Science and Engineering, Sun Yat-sen University, Guangzhou
+510000, China. E-mail: yuanqm3@mail2.sysu.edu.cn (Q.Y.)
+Associate Editor: Lenore Cowen
+
+Abstract
+Motivation: Identifying the functional sites of a protein, such as the binding sites of proteins, peptides, or other biological components, is crucial
+for understanding related biological processes and drug design. However, existing sequence-based methods have limited predictive accuracy,
+as they only consider sequence-adjacent contextual features and lack structural information.
+Results: In this study, DeepProSite is presented as a new framework for identifying protein binding site that utilizes protein structure and
+sequence information. DeepProSite first generates protein structures from ESMFold and sequence representations from pretrained language
+models. It then uses Graph Transformer and formulates binding site predictions as graph node classifications. In predicting protein–protein/
+peptide binding sites, DeepProSite outperforms state-of-the-art sequence- and structure-based methods on most metrics. Moreover,
+DeepProSite maintains its performance when predicting unbound structures, in contrast to competing structure-based prediction methods.
+DeepProSite is also extended to the prediction of binding sites for nucleic acids and other ligands, verifying its generalization capability. Finally,
+an online server for predicting multiple types of residue is established as the implementation of the proposed DeepProSite.
+Availability and implementation: The datasets and source codes can be accessed at https://github.com/WeiLab-Biology/DeepProSite. The pro-
+posed DeepProSite can be accessed at https://inner.wei-group.net/DeepProSite/.
+
+
+
+1 Introduction                                                                   Davenport et al. 2020). Therefore, understanding the loca-
+                                                                                 tion and characteristics of protein binding sites is crucial for
+Interactions between proteins and various biological mole-
+                                                                                 understanding protein function and drug design (Wells and
+cules form the basis of protein function in most biological
+                                                                                 McClendon 2007, De Las Rivas and Fontanillo 2012,
+processes, such as gene expression regulation, signal trans-
+                                                                                 Kuzmanov and Emili 2013, Valkov et al. 2016, Guilliam
+duction, and metabolic pathway regulation (Pawson and
+                                                                                 et al. 2017, Batra et al. 2018). Traditional binding site de-
+Nash 2003, Kortemme et al. 2004, Hermann et al. 2007,                            tection methods, such as X-ray crystallography, two-hybrid
+Rubinstein and Niv 2009, Babu et al. 2011, Zhang et al.                          screening, surface plasmon resonance techniques, and affin-
+2012). These interactions regulate normal cellular functions                     ity purification-mass spectrometry, are expensive and time-
+and play a key role in the pathogenesis of various diseases.                     consuming (Orengo et al. 1997, Shoemaker and Panchenko
+For example, in diseases such as tumour growth, autoim-                          2007, Terentiev et al. 2009, Brettner and Masel 2012,
+mune disorders, and pathogen invasion, the dysregulation                         Wodak et al. 2013). In addition, several technical chal-
+of protein–protein interactions can lead to disorders of                         lenges, including the small size of peptides (Vlieghe et al.
+pathophysiological processes (Clare and Clary 2004, Tovar                        2010), weak binding affinity (Dyson and Wright 2005),
+et al. 2006, Penna et al. 2007, London et al. 2012, Lee                          conformational flexibility (Bertolazzi et al. 2014), high tran-
+et al. 2015). Moreover, therapeutic peptides have become a                       sience, and dynamics of protein–protein interactions, in-
+focus of drug development because they can bind to pro-                          crease the difficulty in accurately identifying the binding
+teins and have therapeutic effects (Fosgerau and Hoffmann                        residues. Therefore, it is important to develop new, fast,
+2015, Bruzzoni-Giovanelli et al. 2018, Lau and Dunn 2018,                        and accurate computational methods.
+
+Received: 21 July 2023; Revised: 4 November 2023; Editorial Decision: 13 November 2023; Accepted: 27 November 2023
+C The Author(s) 2023. Published by Oxford University Press.
+V
+This is an Open Access article distributed under the terms of the Creative Commons Attribution License (https://creativecommons.org/licenses/by/4.0/), which
+permits unrestricted reuse, distribution, and reproduction in any medium, provided the original work is properly cited.
+2                                                                                                                        Fang et al.
+
+
+   In regard to predicting protein binding sites, computational     processing, speech recognition, and protein sequence process-
+methods can generally be divided into two categories: those         ing (Devlin et al. 2018, Chen et al. 2020, Zheng et al. 2020).
+that rely on the protein sequence and those that rely on the        In the past few years, variants of Transformer have excelled
+protein structure. Sequence-based methods are based on the          in graph representation learning (Ingraham et al. 2019, Chen
+primary amino acid sequences of proteins for binding site pre-      et al. 2021, Ying et al. 2021). Compared to the Transformer,
+diction, and some notable examples are DLPred (Zhang et al.         the Graph Transformer introduces graph topology, has pow-
+2019), ProNA2020 (Qiu et al. 2020), DELPHI (Li et al.               erful representation capabilities in graph data modelling, cap-
+2021), SPRINT-Seq (Taherzadeh et al. 2016), PepBind                 tures complex relationships between nodes, can handle
+(Zhao et al. 2018), Visual (Wardah et al. 2020), PepNN-Seq          different types of nodes and edges, and is applied inside pro-
+(Abdin et al. 2020), pepBCL (Wang et al. 2022), and                 tein representation learning (Ingraham et al. 2019).
+DNAPred (Zhu et al. 2019). Although sequence-based meth-            Therefore, the Graph Transformer technology is capable of
+ods allow for the prediction of any protein based solely on its     constructing accurate protein structure models from sequen-
+sequence, their accuracy is limited because potential patterns      ces, effectively learning structural information, and has the
+of binding sites are conserved in the spatial structure but are     potential to improve protein binding site prediction.
+not evident from their sequences (Chen et al. 2017, Rigden             In this study, DeepProSite is presented as a topology-aware
+and Rigden 2009). As a result, features extracted from protein      Graph Transformer model that generates effective structural
+sequences may be insufficient to correctly represent residues.      information and sequence information representations from
+In contrast, methods based on protein structures tend to be         protein sequences, utilizing ESMFold and pretrained language
+more precise when predicting binding sites. The main current        models, respectively, for predicting protein binding sites. We
+structure-based methods are SPPIDER (Porollo and Meller             showcase the capabilities of DeepProSite in predicting pro-
+2007), MaSIF-site (Gainza et al. 2020), GraphPPIS (Yuan             tein–protein/peptide binding sites. DeepProSite outperforms
+et al. 2021), PepSite (Petsalaki et al. 2009), Peptimap (Lavi       state-of-the-art sequence- and structure-based methods.
+et al. 2013), SPRINT-Str (Taherzadeh et al. 2018), PepNN-           Additionally, this is the first study to utilize ESMFold-
+Struct (Abdin et al. 2020), and GraphBind (Xia et al. 2021).        predicted structures for protein–protein/peptide binding site
+   Despite the recent progress made using computational             prediction. This method is also suitable for predicting the
+methods, their application in large-scale high-throughput pre-      binding sites of nucleic acids and other ligands (such as ATP,
+diction is constrained by several issues. First, structure-based    HEME, and metal ions) and does not rely on explicit parame-
+methods require known tertiary structures as a prerequisite.        terization of any physicochemical properties. Finally, we de-
+However, because the structures of most proteins are still un-      veloped a user-friendly and comprehensive web server for site
+known, this approach is not applicable to proteins without a        prediction that can be conveniently accessed and used by
+known structure. Moreover, experimental determination of            biologists.
+protein structures is a time-consuming and challenging task.
+Second, sequence-based methods often use evolutionary infor-
+mation, which is typically generated by comparing the query         2 Materials and methods
+protein to a large-scale protein database in terms of sequence.     2.1 Datasets
+However, the performance of this approach is poor when pre-         In this study, we use the same benchmark datasets as in previ-
+dicting proteins with insufficient sequence similarity.             ous studies to train and evaluate our method. Table 1 pro-
+Extracting evolutionary features also takes a long time. Third,     vides detailed information about the datasets. Specifically,
+existing methods rely heavily on hand-designed features to          1279 peptide-binding proteins (PBPs) were originally derived
+construct models, which may fail to consider key biological         from the study of SPRINT-Seq (Taherzadeh et al. 2016).
+features.                                                           These datasets were collected from the BioLiP database (Yang
+   In recent years, the field of protein structure prediction has   et al. 2013a) and proteins with more than 30% sequence
+witnessed remarkable advancements due to the application of         identity were excluded. Peptide-binding residues in a protein
+deep learning techniques. These include AlphaFold2 (Jumper          were defined as residues containing at least one atom, with
+et al. 2021) and RoseTTAFold (Baek et al. 2021). Among              distance less than 3.5 Å from any atom in the peptide. To en-
+these advances, ESMFold (Lin et al. 2023) has emerged as a          sure fair comparison with previous studies, we employ identi-
+noteworthy development that deploys a large-scale pretrained        cal data partitioning strategies for both model training and
+protein language model, instead of the conventional multiple        testing. Ten percent of the randomly selected compounds in
+sequence alignment method, to generate structure predictions.       the study of SPRINT-Str (Taherzadeh et al. 2018) are used as
+By utilizing a single sequence as input, ESMFold greatly            the independent test dataset (Pep_Test_125), and the rest are
+speeds up the prediction process while maintaining high accu-       used as the training dataset (Pep_Train_1154). PepBind
+racy in predicting atomic resolution structures. Moreover,          (Zhao et al. 2018) randomly divided these 1279 PBPs into
+ESMFold outperforms other methods when dealing with pro-            two equally sized subsets for training and testing
+teins that have few homologous sequences. This remarkable           (Pep_Train_640 and Pep_Test_639).
+achievement undoubtedly offers immense potential to contrib-           Three datasets from previous studies [Pro_Dset_186
+ute to downstream studies on protein structure and function,        (Murakami and Mizuguchi 2010), Pro_Dset_164 (Dhole
+including binding site prediction.                                  et al. 2014), and Pro_Dset_72 (Murakami and Mizuguchi
+   Simultaneously, graph neural networks and their variants         2010)] were used to predict protein–protein binding sites.
+(Chen et al. 2021, Yuan et al. 2021) have been widely used in       These datasets were built from annotated complexes in the
+various graph-related tasks. However, achieving effective           Protein Data Bank (PDB) (Berman et al. 2000) and the pro-
+learning for protein structures remains a challenging task. On      tein–protein docking benchmark set version 3.0 (Hwang et al.
+the other hand, Transformer (Vaswani et al. 2017) has rap-          2008). In these datasets, a protein-interacting residue was
+idly become a mainstream architecture for natural language          defined as a surface residue (RSA > 5%) that lost more than
+Protein binding site prediction                                                                                                                3
+
+
+Table 1. Statistics information of the benchmark datasets used in this study.
+
+Type                      Dataset                              Nproteina                 Nposb                  Nnegc                  PNratiod
+
+Peptide                   Pep_Train_1154                       1154                      15 030                 261 792                0.057
+                          Pep_Test_125                          125                       1719                   29 151                0.059
+                          Pep_Train_640                         640                       8259                  149 103                0.055
+                          Pep_Test_639                          639                       8490                  141 840                0.060
+Protein                   Pro_Train_335                         335                      10 374                  55 992                0.185
+                          Pro_Test_60                            60                       2075                   11 069                0.187
+                          Pro_Test_315                          315                       9355                   55 976                0.167
+  a
+    Number of proteins.
+  b
+    Number of binding residues.
+  c
+    Number of nonbinding residues.
+  d
+    PNratio ¼ Npos/Nneg.
+
+
+1 Å2 of absolute solvent accessibility after protein–protein                   by the maximal ASA of a specific amino acid type. The second
+complex formation. A previous study (Yuan et al. 2021) inte-                    is one-hot secondary structure profile representing eight cate-
+grated three datasets into a fused dataset. Redundant proteins                  gories of secondary structure states. The third is sine and co-
+with a sequence similarity of over 25% and sequence cover-                      sine values of the protein backbone torsion angles / and w
+age greater than 90% were removed, resulting in a final data-                   reflect the geometry. These three sets of features are combined
+set of 395 proteins. Among these proteins, a subset of 335                      to form a 14-dimensional feature group, which we refer to as
+proteins (designated Pro_Train_335) was randomly selected                       DSSP.
+for training, while the remaining 60 proteins were reserved
+for independent testing (designated Pro_Test_60). Another in-                   2.2.3 Language model embeddings
+dependent test dataset (Pro_Test_315) was constructed from                      We applied the widely used protein language model named
+protein complexes published in recent years (January 2014–                      ProtT5-XL-U50 (Elnaggar et al. 2021) (denoted as ProtT5)
+May 2021). Furthermore, the induced fit or conformational                       to extract sequence information, which is a self-supervised
+selection often results in conformational changes during pro-                   autoencoder based on the transformer model. Specifically,
+tein binding (Hammes et al. 2009). To assess the robustness                     ProtT5 was first pretrained on BFD (Steinegger et al. 2019),
+of the method and evaluate how conformational changes af-                       a dataset containing a large number of protein sequences
+fect its performance, a previous study (Yuan et al. 2021) col-                  constructed using block search and combination algo-
+lected 31 unbound structures corresponding to 31 proteins                       rithms, to predict masked amino acids according to the se-
+sourced from Pro_Test_60 to generate an additional unbound                      quence context. Then, ProtT5 was fine-tuned on UniRef50,
+test dataset.
+                                                                                a dataset containing more than 500 million nonredundant
+2.2 Protein graph construction                                                  protein sequences covering a variety of biological species
+                                                                                and functions (Suzek et al. 2015). We extracted a 1024-di-
+The protein–protein/peptide binding site prediction in this
+                                                                                mensional sequence embedding for each residue using
+work is formulated as a node classification task in a protein
+                                                                                ProtT5 and normalized them to scores between 0 and 1 us-
+graph. For a protein with n residues, we extracted the se-
+quence and structural features, as well as the 3D coordinates                   ing Formula (1):
+of each node, from which a node feature matrix H 2 Rnd
+                                                                                                                x  xmin
+and a coordinate matrix X 2 Rn3 were derived to construct                                           xnorm ¼                                 (1)
+                                                                                                               xmax  xmin
+an attributed protein graph.
+
+2.2.1 Predicted protein structures                                              where x is the original feature value in the embedding vector,
+                                                                                and xmax and xmin denote the maximum and minimum values
+To capture the geometric information of each residue, we ap-
+plied esmfold_v1 (Lin et al. 2023) (denoted as ESMFold) to                      of that feature type in the training set.
+predict the structure for a given sequence. ESMFold adopts a                    2.3 The DeepProSite framework
+large language model and an end-to-end neural network to
+                                                                                This work presents a new sequence-based method,
+accurately make atomic resolution structure predictions with
+no need for multisequence alignment, resulting in up to 60                     DeepProSite, to improve protein binding site prediction by in-
+faster than the state of the art while maintaining similar accu-                tegrating protein spatial information. As illustrated in Fig. 1,
+racy. We downloaded the pretrained ESMFold model to pre-                        the protein sequences are input to the ESMFold and ProtT5
+dict the structures of our whole binding site datasets                          pretrained language models to generate predicted protein
+mentioned above.                                                                structures and sequence embeddings, respectively. From the
+                                                                                predicted structures, we constructed k-nearest neighbour
+2.2.2 Structural properties                                                     graphs in which each node’s location is determined by the co-
+For each residue in the ESMFold-predicted structures, we                        ordinate of the a-carbon atom, and k ¼ 30 in all experiments.
+extracted three types of structural features utilizing DSSP                     The language model sequence embeddings and DSSP are
+(Kabsch and Sander 1983). The first is relative solvent accessi-                concatenated as the final node features, and several edge fea-
+bility (RSA), which provides useful information for the pre-                    tures are computed end to end to reflect the distance, direc-
+diction of binding sites since solvent-exposed residues have                    tion, and orientation between two adjacent nodes. The Graph
+more potential to interact with other molecules. RSA is nor-                    Transformer model is applied to pay attention to and aggre-
+malized from the solvent accessible surface area (ASA) value                    gate the features of neighbouring nodes and edges to update
+4                                                                                                                                              Fang et al.
+
+
+
+
+Figure 1. The overall pipeline of the presented DeepProSite method. The protein sequences are fed into ESMFold and ProtT5 pretrained language model
+to obtain both predicted structures and sequence embeddings. From the predicted structures, we build k-nearest neighbour graphs where each node’s
+position is determined by the a-carbon atom coordinate. The final node features consist of concatenated language model embeddings and DSSP, while
+several edge features account for the distance, direction, and orientation between adjacent nodes. A Graph Transformer model is then applied to
+aggregate the features of neighbouring nodes and edges and update the target node’s representation. This process ultimately captures the binding
+patterns of the proteins and proteins/peptides.
+
+
+the target node’s representation, finally capturing the protein               To incorporate protein structure information, GraphSite
+binding patterns.                                                             (Yuan et al. 2022) utilizes a k-nearest mask based on the
+                                                                              distance matrix to exclude amino acids that are spatially re-
+2.3.1 Geometric edge features                                                 mote when calculating attention scores. However, this
+In addition to the precomputed node features (i.e. ProtT5 and                 framework cannot capture the geometric edge features be-
+DSSP) in the protein graph, we also adopted the relative spa-                 tween residues. Here, we integrated the edge features when
+tial and positional encodings proposed in Ingraham et al.                     updating the target node by
+(2019) to represent the geometric edge features of two neigh-
+                                                                                                              X                        
+bouring residues, which were extracted end to end in our                                       h0i ¼ hi þ               aij WV hj k eij               (5)
+framework. We first augmented the coordinate of a residue xi                                                j2N ðiÞ[i
+with a local coordinate system Oi to reflect the protein back-
+bone geometry:                                                                where the attention coefﬁcients aij are computed via
+
+                             Oi ¼ ½bi ni bi  ni                       (2)                                            T             !
+                                                                                                                WQ hi       WK hj k eij
+                                                                                         aij ¼ softmax                      pﬃﬃﬃ                      (6)
+where bi is the negative bisector of the angle between vectors                                                               d
+ðxi1  xi Þ and ðxiþ1  xi Þ, and ni is a unit vector normal to
+this plane. Concretely, we deﬁned:                                            where hi , hj , and h0i are the hidden embeddings of node i,
+                                                                              node j, and the updated node i, respectively. WQ , WK , and
+             xi  xi1             vi  viþ1             vi  viþ1            WV are learnable weight matrices used to project the embed-
+    vi ¼                  ; bi ¼                ; ni ¼                  (3)
+           jjxi  xi1 jj        jjvi  viþ1 jj        jjvi  viþ1 jj         dings to the query, key, and value embeddings. d represents
+                                                                              the hidden dimension, and k represents the vector concatena-
+   Finally, the rotationally and translationally invariant spa-               tion operation.
+                    ðsÞ
+tial edge features eij are defined as follows:
+                                                                              2.3.3 Multilayer perceptron
+                                                                          The multilayer perceptron (MLP) leverages the output from
+           ð sÞ                              xj  xi
+       eij ¼          rðjjxj  xi jjÞ; OTi              ; q OTi Oj      (4)
+                                           jjxj  xi jj                       the last layer of the Graph Transformer to estimate the resi-
+                                                                              duewise probability of protein–protein/peptide binding via
+where the ﬁrst feature is a radial-based distance encoding (we                                                        
+                                                                                                 0
+apply 16 anisotropic Gaussian RBFs spaced from 0 to 20 Å),                                     Y ¼ Sigmoid H ðLÞ W þ b                               (7)
+the second feature represents the relative direction of the
+neighbour node xj to the coordinate system of the centre node                 where H ðLÞ 2 Rnd is the output hidden state of the Lth Graph
+xi , and the third feature is a quaternion representation of the              Transformer layer; W 2 Rd1 is the learnable weight matrix;
+                                                                                                             0
+spatial rotation matrix OTi Oj to reﬂect orientation (Huynh                   b 2 Rd is the bias term, and Y 2 Rn1 denotes the predictive
+2009). In addition, to reﬂect the distances between residues in               scores of n residues in a query protein. The sigmoid function
+the sequence, we also concatenated the relative positional                    converts the raw network outputs into protein/peptide-
+             ðpÞ
+encodings eij to the edge features using a sinusoidal function                binding probabilities between 0 and 1.
+of the sequence gap between nodes i and j.
+                                                                              2.4 Implementation details
+2.3.2 Graph Transformer                                                       To evaluate our model’s performance, we randomly divided
+The standard Transformer encoder includes two compo-                          our training samples into five parts and employed the 5-fold
+nents: multi-head self-attention and position-wise feed-                      cross-validation (CV) process. In each round, we trained a
+forward network. The self-attention module globally                           model on four parts of the data while using the remaining
+calculates the attention scores for all nodes to the target                   part for model evaluation. We repeated this procedure five
+node and then aggregates them to update the target node.                      times and used the mean validation performance to choose
+Protein binding site prediction                                                                                                                                                     5
+
+
+the model’s hyperparameters (Supplementary Tables S1–S4).                                                           3 Results
+To make predictions for the test set, we used all five trained                                                      3.1 Geometry feature improves the model
+models in the above CV steps for making inferences, and the                                                         performance
+average of these predictions was taken as the final prediction                                                      To evaluate the effectiveness of DeepProSite, we conducted
+value of DeepProSite.                                                                                               AUC and AUPRC assessments employing both 5-fold CV
+  Finally, we utilized a four-layer graph transformer model                                                         and independent testing approaches. Specifically, on
+with four attention heads, 64 hidden units, and a dropout                                                           Pep_Train_1154 and Pep_Test_125, DeepProSite obtained
+rate of 0.2. The Adam optimizer with b1 of 0.9, b2 of 0.98,                                                         AUCs of 0.864 and 0.883, respectively, and AUPRCs of
+and e of 109 was used to optimize our model using binary                                                           0.404 and 0.480, respectively (Supplementary Table S1). On
+cross-entropy loss. In each training epoch, we fit our model                                                        Pep_Train_640 and Pep_Test_639, DeepProSite obtained
+in batches with 32 samples on 5000 proteins drawn from                                                              AUCs of 0.842 and 0.861 and AUPRCs of 0.360 and 0.411,
+the training data using random sampling with replacement.                                                           respectively (Supplementary Table S2). On Pro_Train_335
+DeepProSite was trained for 30 epochs with early stopping                                                           and Pro_Test_60, DeepProSite obtained AUCs of 0.795 and
+of eight epochs. To enhance the generalization and robust-                                                          0.813 and AUPRCs of 0.458 and 0.490, respectively
+ness of the model, we add random Gaussian noise to the                                                              (Supplementary Table S3). The consistency of our model’s
+features.                                                                                                           performance on the CV and in independent testing proved its
+                                                                                                                    robustness. We compared DeepProSite to Transformer, a
+                                                                                                                    baseline model agnostic to geometry features (using the same
+                                                                                                                    hyperparameters as DeepProSite), to further investigate the
+2.5 Evaluation metrics                                                                                              benefits of adding protein geometry information and Graph
+The distribution of positive and negative samples in the data-                                                      Transformer. The input features of both models are identical,
+set used here is highly unbalanced. To comprehensively evalu-                                                       and the baseline model serves as a geometry-agnostic point of
+ate the effectiveness of the proposed method, we used a range                                                       reference, enabling assessment of how spatial information
+of standard evaluation metrics, including accuracy (ACC),                                                           affects the prediction of binding residues. According to our
+precision (Pre), recall rate (Rec), specificity (Spe), F1 score                                                     results,    DeepProSite       consistently    outperforms      the
+(F1), Matthews correlation coefficient (MCC), area under the                                                        Transformer baseline model, as seen by greater F1, MCC,
+receiver operating characteristic curve (AUC), and area under                                                       AUC, and AUPRC values on Pep_Test_125, Pep_Test_639,
+the precision-recall curve (AUPRC). The formulas for com-                                                           Pro_Test_60, and Pro_Test_315 (Supplementary Table S5).
+puting these metrics are as follows:                                                                                Precision-recall and ROC curves of DeepProSite and
+                                                                                                                    Transformer for both the 5-fold CV and independent datasets
+                                            TP þ TN                                                                 are shown in Fig. 2a–f, where the DeepProSite curve consis-
+                            ACC ¼                                                                       (8)         tently lies above the Transformer curve. According to our
+                                     TP þ TN þ FP þ FN
+                                                 TP                                                                 findings, our method performs better than Transformer, pos-
+                                Precision ¼                                                             (9)         sibly due to its ability to capture spatial information more ef-
+                                               TP þ FP
+                                                                                                                    fectively. The Graph Transformer operates by analyzing the
+                                                TP                                                                  relationships between nodes in graph data. This approach
+                                 Recall ¼                                                             (10)
+                                            TP þ FN                                                                 enables Graph Transformer to better handle structured data,
+                                                 TN                                                                 such as molecular or protein structures.
+                               Specificity ¼                                                          (11)
+                                               TN þ FP                                                                 To gain further insight into our approach and Transformer,
+                                        Precision  Recall                                                          we tested them on amino acids with various numbers of nonlo-
+                             F1 ¼ 2                                                                  (12)          cal contacts. Two residues with a sequence separation of more
+                                        Precision þ Recall
+                                                                                                                    than 20 residues, yet the distance of their Ca atoms was less
+                                                                                                                    than 12 Å, are considered to be nonlocal contacts. On indepen-
+                                    TP  TN  FN  FP                                                               dent test datasets, as shown in Fig. 2g and h, our method consis-
+MCC ¼ pﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃﬃ
+       ðTP þ FPÞ  ðTP þ FNÞ  ðTN þ FPÞ  ðTN þ FNÞ                                                                tently outperforms Transformer. Furthermore, the performance
+                                                                                                                    gap between the two methods widens significantly as the num-
+                                                                                                      (13)
+                                                                                                                    ber of nonlocal contacts increases. Specifically, DeepProSite out-
+where true positives (TP), true negatives (TN), false posi-                                                         performs Transformer by 13.3% in terms of MCC for amino
+                                                                                                                    acids with 0–9 nonlocal contacts, as observed in Pep_Test_125.
+tives (FP), and false negatives (FN) represent the number of
+                                                                                                                    However, this gap widened to 40.1% for amino acids with 20
+correctly predicted binding sites, correctly predicted non-
+                                                                                                                    nonlocal contacts (Fig. 2g). Similarly, in Pro_Test_315,
+binding sites, incorrectly predicted binding sites, and incor-
+                                                                                                                    DeepProSite outperforms Transformer by 9.7% in MCC on
+rectly predicted nonbinding sites, respectively. AUC and
+                                                                                                                    amino acids with 0–9 nonlocal contacts, and the gap widens to
+AUPRC are threshold-independent metrics that provide a                                                              37.1% for amino acids with 20 nonlocal contacts (Fig. 2h).
+comprehensive evaluation of model performance. In con-                                                              We observed similar trends in Pep_Test_639 and Pro_Test_60
+trast, other metrics require the use of a threshold and the                                                         (Supplementary Fig. S1). These findings emphasize the signifi-
+conversion of predicted probabilities to binary predictions.                                                        cance of spatial information and demonstrate DeepProSite’s
+The optimal threshold is determined by maximizing the                                                               efficiency in identifying protein/peptide-binding residues, by
+MCC for each model. AUPRC is used for hyperparameter                                                                exploiting knowledge of protein structure.
+selection because it is more sensitive than other selectors,
+provides a comprehensive analysis when dealing with imbal-                                                          3.2 Feature importance and model ablation
+anced datasets, and emphasizes few classes in imbalanced                                                            To evaluate the relative importance of the features utilized in
+binary classiﬁcation problems.                                                                                      our study, we conducted an investigation on the effect of
+6                                                                                                                                          Fang et al.
+
+
+
+
+Figure 2. Impact of geometry and sequential information on model performance on datasets. Receiver operating characteristic curves and precision-recall
+curves of DeepProSite and Transformer on (a and b) Pep_Train_1154, Pep_Test_125, (c and d) Pep_Train_640, Pep_Test_639, and (e and f)
+Pro_Train_335, Pro_Test_60, Pro_Test_315. MCC comparison of two methods on amino acids with different nonlocal contacts in (g) Pep_Test_125 and
+(h) Pro_Test_315.
+
+
+
+different feature combinations. This process involved analyz-                 and Pep_Test_125 using seven feature combinations, namely,
+ing the performance of DeepProSite when each feature is used                  (i) DSSP, (ii) ProtT5, (iii) DSSP þ ProtT5, (iv) EVO (PSSM þ
+individually or in combination with other features.                           HMM), (v) DSSP þ EVO, (vi) ProtT5 þ EVO, and (vii) DSSP
+Specifically, we evaluated DeepProSite on Pep_Train_1154                      þ ProtT5 þ EVO. As shown in Table 2, only the sequence
+Protein binding site prediction                                                                                                    7
+
+
+representation extracted from ProT5 yielded satisfactory per-       AUPRC. The results demonstrate that DeepProSite outper-
+formance, with average AUCs of 0.858 and 0.880 and aver-            forms all other methods significantly (Tables 3 and 4).
+age AUPRCs of 0.386 and 0.467 on Pep_Train_1154 (CV)                Specifically, on Pep_Test_125, DeepProSite achieves an MCC
+and Pep_Test_125, respectively. Alternatively, when relying         of 0.451 and an AUC of 0.883, exhibiting a relative improve-
+only on DSSP as node features, the performance of our               ment of 17.1% and 8.3%, respectively, compared to
+method declines, with average AUC decreases of 0.086 and            the second-best sequence-based method, PepBCL. Similar
+0.073 and average AUPRC decreases of 0.131 and 0.143, re-           observations were made on Pep_Test_639, where
+spectively. This decline indicates that while the structural        DeepProSite outperforms PepBCL by 27.2% and 7.1% in
+properties of amino acids can provide some insight into the         terms of MCC and AUC, respectively. In addition, our
+peptide binding sites, they are not sufficient to capture the       method outperforms most other methods with a recall of
+complicated patterns involved. When integrating ProtT5 and          0.392 and precision of 0.578 on Pep_Test_125, and a recall
+DSSP, the average AUCs obtained on Pep_Train_1154 and               of 0.400 and precision of 0.460 on Pep_Test_639. Recall
+Pep_Test_125 were 0.864 and 0.883, respectively, and the av-        and precision are imbalanced measures that heavily depend
+erage AUPRCs obtained were 0.404 and 0.480, respectively,           on the chosen threshold. Despite being a sequence-based
+bringing a substantial improvement, indicating that the com-        predictor that solely relies on protein sequences,
+bined feature groups are not redundant. To determine                DeepProSite outperforms PepNN-Struct, a state-of-the-art
+whether evolutionary information contributes to the perfor-         structure-based method, in terms of both MCC and AUC by
+mance of our model, we compared the performance of replac-          40.5% (31.9%) and 5.0% (2.7%), respectively, on two in-
+ing ProtT5 with evolutionary information, as well as adding         dependent test datasets (Tables 3 and 4). These results indi-
+additional evolutionary information. The method for extract-        cate that our method can accurately identify peptide-
+ing evolutionary information is described in Supplementary          binding sites using only protein sequence information.
+Section S1. The results show that replacing ProtT5 with evo-
+lutionary information becomes less effective, indicating the        3.4 Comparison with state-of-the-art methods on
+superiority of the language model in this method. In addition,      protein datasets
+the integration of all three features does not lead to a signifi-   We compared the performance of DeepProSite with that of
+cant improvement, indicating that the embedding of the              state-of-the-art methods on two protein datasets:
+ProtT5 language model is likely to have captured evolution-         Pro_Test_60 and Pro_Test_315. The methods evaluated in-
+ary information. Considering the highest accuracy of                cluded five sequence-based methods [PSIVER (Murakami and
+ProtT5þDSSP, we chose ProtT5þDSSP as the final model.               Mizuguchi 2010), SCRIBER (Zhang and Kurgan 2019),
+We also evaluated the performance of our model by using             DLPred (Zhang et al. 2019), ProNA2020 (Qiu et al. 2020),
+predicted protein structures from AlphaFold2. As shown in           and DELPHI (Li et al. 2021)] and five structure-based meth-
+Supplementary Table S6, our method achieved similar                 ods [SPPIDER (Porollo and Meller 2007), DeepPPISP (Zeng
+results when using protein structures predicted from                et al. 2020), MaSIF-site (Gainza et al. 2020), GraphPPIS
+AlphaFold2 and ESMFold. We used ESMFold to predict                  (Yuan et al. 2021), and RGN (Wang et al. 2022)]. As shown
+protein structure because it offers rapid computational             in Table 5, DeepProSite exhibited superior performance com-
+speed. Furthermore, we investigated different strategies for        pared to all other methods evaluated, even those that relied
+selecting adjacent residues based on the defined contact dis-       on the utilization of native protein structures in their
+tance and the fixed k-nearest neighbours used in this study.        structure-based approaches. Specifically, on Pro_Test_60,
+The results show that the performance of the two strategies         DeepProSite consistently outperformed PSIVER, ProNA2020,
+is similar (Supplementary Table S7). In addition, we investi-       SCRIBER and DLPred on MCC and AUC, and outperformed
+gate the impact of the attention mechanism [Equations (5)           DELPHI by 68.4% and 16.3%, respectively. DeepProSite
+and (6)]. According to the results in Supplementary Table           also outperforms the aforementioned state-of-the-art struc-
+S8, the model’s performance with attention is better than           ture-based methods and outperforms RGN by 8.6% and
+that without attention.                                             2.8% on MCC and AUC, respectively. Pro_Test_315 is a re-
+                                                                    cently solved protein dataset, on which DeepProSite achieved
+3.3 Comparison with state-of-the-art methods on                     an MCC of 0.355 and an AUPRC of 0.432, surpassing
+peptide datasets                                                    DeepPPISP, SPPIDER, and MaSIF-site. Furthermore,
+To assess the predictive capability of DeepProSite, we con-         DeepProSite outperforms the structure-based method
+ducted a comparative analysis considering various other             GraphPPIS by 7.9% and 2.1% in terms of MCC and
+sequence-based and structure-based methods. Specifically, we        AUPRC, respectively (Table 6). Given that the training set for
+evaluated the performance of DeepProSite on Pep_Test_125            our method was originally constructed using native complex
+and Pep_Test_639, and compared it against five sequence-            structures, it is valuable to explore the impact of utilizing un-
+based methods (SPRINT-Seq, PepBind, Visual, PepNN-Seq,              bound structures on predictive performance. Toward this
+and PepBCL) and four structure-based methods [PepSite               goal, we conducted a comparison of DeepProSite’s perfor-
+(Petsalaki et al. 2009), Peptimap, SPRINT-Str (Taherzadeh           mance in predicting a subset of Pro_Test_60 (bound) and its
+et al. 2018), and PepNN-Struct (Abdin et al. 2020)]. Notably,       corresponding unbound structure against other structure-
+for most of the compared methods, the source code is not            based methods. Because all four structure-based algorithms
+available, and therefore, we obtained the results directly from     were trained with bound structures, their performance was
+the referenced studies. We also emphasize that predicting           found to be poor in predicting unbound structures, as shown
+peptide-binding sites is an unbalanced prediction task where        in Fig. 3. In particular, the MaSIF-site’s MCC exhibited a
+negative samples are more prevalent in the dataset. Thus, we        35.0% decrease and GraphPPIS’s MCC exhibited a 14.6%
+placed more focus on evaluation metrics that consider both          decrease, whereas DeepProSite was not affected by the in-
+negative and positive samples, such as F1, MCC, AUC, and            duced fitting due to its unbiased training process using only
+8                                                                                                                                               Fang et al.
+
+
+Table 2. Comparison of feature performance in predicting PBPs on Pep_Train_1154 and Pep_Test_125.a
+
+Feature                                                Pep_Train_1154 CV                                              Pep_Test_125
+
+                                                       AUC                               AUPRC                        AUC                          AUPRC
+
+EVO                                                    0.831                             0.323                        0.855                        0.426
+DSSP                                                   0.778                             0.273                        0.810                        0.337
+ProtT5                                                 0.858                             0.386                        0.880                        0.467
+ProtT5þEVOþDSSP                                        0.861                             0.402                        0.875                        0.470
+EVOþDSSP                                               0.835                             0.342                        0.852                        0.427
+ProtT5þEVO                                             0.862                             0.386                        0.883                        0.477
+ProtT5þDSSP (DeepProSite)                              0.864                             0.404                        0.883                        0.480
+  a
+    EVO means evolutionary features represented by HMM and PSSM.
+Bold fonts indicate the best results.
+
+
+Table 3. Performance comparison of DeepProSite with state-of-the-art methods on Pep_Test_125 dataset.a
+
+Method                                  Spe                         Rec                            Pre                   MCC                          AUC
+
+Pepsite                                 0.970                       0.180                                                0.200                        0.610
+Peptimap                                0.950                       0.320                                                0.270                        0.630
+SPRINT-Seq                              0.960                       0.210                                                0.200                        0.680
+SPRINT-Str                              0.980                       0.240                                                0.290                        0.780
+Visual                                  0.680                       0.670                                                0.170                        0.730
+PepBind                                                             0.344                          0.469                 0.372                        0.793
+PepNN-Seq                                                                                                                0.278                        0.805
+PepNN-Struct                                                                                                             0.321                        0.841
+PepBCL                                  0.984                       0.315                          0.540                 0.385                        0.815
+DeepProSite                             0.983                       0.392                          0.578                 0.451                        0.883
+    a
+        Predictions of other methods are obtained from the corresponding publications.
+
+
+
+
+Table 4. Performance comparison of DeepProSite with state-of-the-art methods on Pep_Test_639 dataset.
+
+Method                                  Spe                         Rec                            Pre                   MCC                          AUC
+
+PepBind                                                             0.317                          0.450                 0.348                        0.767
+PepNN-Seq                                                                                                                0.251                        0.792
+PepNN-Struct                                                                                                             0.301                        0.838
+PepBCL                                  0.983                       0.252                          0.470                 0.312                        0.804
+DeepProSite                             0.972                       0.400                          0.460                 0.397                        0.861
+
+
+
+
+Table 5. Performance comparison of DeepProSite with state-of-the-art methods on Pro_Test_60 dataset.
+
+Method                       ACC                 Rec                 Pre                   F1              MCC                 AUC                 AUPRC
+
+PSIVER                       0.561               0.534               0.188                 0.278           0.074               0.573               0.190
+ProNA2020                    0.738               0.402               0.275                 0.326           0.176               N/A                 N/A
+SCRIBER                      0.667               0.568               0.253                 0.350           0.193               0.665               0.278
+DLPred                       0.682               0.565               0.264                 0.360           0.208               0.677               0.294
+DELPHI                       0.697               0.568               0.276                 0.372           0.225               0.699               0.319
+DeepPPISP                    0.657               0.539               0.243                 0.335           0.167               0.653               0.276
+SPPIDER                      0.752               0.557               0.331                 0.415           0.285               0.755               0.373
+MaSIF-site                   0.780               0.561               0.370                 0.446           0.326               0.775               0.439
+GraphPPIS                    0.776               0.584               0.368                 0.451           0.333               0.786               0.429
+RGN                          0.785               0.587               0.382                 0.463           0.349               0.791               0.441
+DeepProSite                  0.842               0.443               0.501                 0.470           0.379               0.813               0.490
+
+Note that all the other methods’ results are directly obtained from the previous works, GraphPPIS and RGN, as all these methods use the same training and
+testing datasets.
+
+
+
+
+sequence data (Supplementary Table S9). This outcome dem-                          results with the latest structure-based methods ScanNet
+onstrates DeepProSite as a more robust predictor than the                          (Tubiana et al. 2022) and PeSTo (Krapp et al. 2023)
+other methods. Although we did not use evolutionary infor-                         (Supplementary Table S10). Taken together, these results
+mation or native structures, we still achieved competitive                         demonstrate that our proposed method is practical and
+Protein binding site prediction                                                                                                              9
+
+
+Table 6. Performance comparison of DeepProSite with state-of-the-art methods on Pro_Test_315 dataset.
+
+Method                   ACC                Rec               Pre                F1                 MCC            AUC               AUPRC
+
+DeepPPISP                0.603              0.622             0.206              0.310              0.157          0.660             0.256
+SPPIDER                  0.744              0.613             0.305              0.407              0.294          0.783             0.376
+MaSIF-site               0.764              0.589             0.322              0.417              0.304          0.778             0.372
+GraphPPIS                0.739              0.689             0.313              0.430              0.329          0.798             0.423
+DeepProSite              0.804              0.576             0.378              0.457              0.355          0.805             0.432
+
+
+
+efficient, especially in situations where only the protein se-             PepNN-Struct predicted 11 correct binding residues, resulting
+quence is available rather than the native structure.                      in F1 score, MCC, and AUPRC of 0.458, 0.419, and 0.492,
+                                                                           respectively, even as a structure-based prediction method.
+3.5 Influence of predicted protein structure quality                       Similar results were obtained for PepBCL and PepBind. In
+DeepProSite relies on predicted protein structures for geomet-             protein 4BVX_A, there are a total of 203 residues with 33
+ric deep learning, making the accuracy of ESMFold prediction               protein binding residues. DeepProSite predicted 34 binding
+crucial for downstream binding site prediction. The average                residues, 25 of which are true positives, resulting in an F1
+global distance test (GDT) (Zemla 2003) between the pre-                   score of 0.758, MCC of 0.711, and AUPRC of 0.754,
+dicted structures generated by ESMFold and the correspond-                 whereas Transformer predicted only 10 correct binding resi-
+ing native structures in Pep_Test_125 was calculated using                 dues, resulting in a lower F1 score, MCC, and AUPRC of
+SPalign (Yang et al. 2012) to assess the overall quality of pro-           0.507, 0.410, and 0.470, respectively. GraphPPIS predicted 24
+tein structures. Figure 4 displays the quality of protein struc-           correct binding residues, resulting in F1 score, MCC and
+tures on Pep_Test_125, as well as the corresponding AUPRC                  AUPRC of 0.676, 0.610, and 0.612, respectively, even as a
+values for each protein (blue scatterplots). Specifically, we di-          structural prediction method. Similar results were obtained for
+vided proteins in Pep_Test_125 into six bins based on their                SPPIDER and ProNA2020. The results indicate that incorpo-
+GDT scores and computed the average GDT and AUPRC for                      rating the spatial information captured from the graph module
+each bin (red line). The results showed a positive correlation             can enhance the precision of our approach in recognizing
+between the prediction quality of ESMFold as assessed by                   binding sites and minimizing the chances of false positives. As
+GDT and the performance of DeepProSite, as measured by                     shown in Fig. 5a, the majority of the false positive binding resi-
+AUPRC. According to predictions made by DeepProSite, the                   dues that are identified by DeepProSite (highlighted in red) are
+top 30% of proteins with the highest GDT (average                          located at or near the protein–protein/peptide interaction inter-
+GDT ¼ 0.964) have an average AUPRC of 0.627, which is sig-                 face or near the protein/peptide structure.
+nificantly higher than that of the bottom 30% of proteins with
+the lowest GDT (average GDT ¼ 0.526), which showed an av-                  3.7 Extending DeepProSite to other types of ligands
+erage AUPRC of 0.375 according to Mann–Whitney U-test                      To investigate the generalizability of our model, we analyzed
+results (P-value ¼ 1.40  104) . Moreover, our analysis                   how DeepProSite performed when detecting various binding
+revealed a negative correlation between the prediction error of            sites for different ligands. We retrained DeepProSite on data-
+ESMFold at the amino acid level, as measured by the distance               sets of different ligand types and compared it with the results
+between predicted and natural amino acids after structure align-           of various methods, such as TargetS (Yu et al. 2013), S-SITE
+ment, and the performance of DeepProSite (Supplementary                    (Yang et al. 2013b), COACH (Yang et al. 2013b), IonCom
+Tables S11–S14). Overall, these results highlight the critical role        (Hu et al. 2016), ATPbind (Hu et al. 2018), DELIA (Xia et al.
+of accurate protein structure prediction in successfully predict-          2020), and GraphBind (Xia et al. 2021), on multiple bench-
+ing protein/peptide binding sites in DeepProSite.                          mark ligand datasets, including five biologically relevant mol-
+                                                                           ecules, namely DNA, RNA, ATP, HEME, and carbohydrate,
+3.6 Case study                                                             as well as three metal ions, specifically Mg2þ, Ca2þ, and
+To visually depict DeepProSite’s predicted ability, two protein            Mn2þ. Details of these benchmark datasets are provided in
+sequences, PDB ID: 4L3O (chain A) and 4BVX (chain A),                      Supplementary Section S4 and Table S15. The performance of
+were randomly selected from the Pep_Test_125 and                           DeepProSite compared to multiple methods is shown in
+Pro_Test_315 datasets for illustrative purposes. Figure 5                  Supplementary Tables S16 and S17. In each dataset,
+shows the results of predicting binding sites with different               DeepProSite outperforms competing methods in most metrics.
+methods, including DeepProSite, Transformer (a geometry-                   Table 7 displays the results for Rec, Pre, F1, MCC, and AUC
+independent baseline method), and two distinct methods for                 metrics achieved by DeepProSite and GraphBind. The results
+predicting peptide binding sites, namely PepBCL and                        show that DeepProSite improves the MCC and AUC by
+PepBind, along with two methods, SPPIDER and                               0.023–0.107 and 0.011–0.068 for DNA, RNA, ATP, Mg2þ,
+ProNA2020, used for predicting protein binding sites. In the               Ca2þ, and Mn2þ, respectively, compared with GraphBind.
+case of protein 4L3O_A, among the total of 297 residues, 28                The above results indicate that DeepProSite has strong robust-
+residues are peptide-binding. DeepProSite correctly predicted              ness and generalization ability, and can serve as a reliable tool
+16 true positive binding residues out of the 19 predicted bind-            for predicting ligand binding sites based on protein sequences.
+ing residues, resulting in F1 score, MCC, and AUPRC of
+0.638, 0.622, and 0.707, respectively. In contrast,                        3.8 Establishment of a web server to facilitate the
+Transformer predicted only five correct binding residues,                  prediction of multiple types of binding sites
+resulting in a lower F1 score, MCC, and AUPRC of 0.326,                    To facilitate the use of the proposed DeepProSite, we devel-
+0.294, and 0.576, respectively, without the use of a graph.                oped a public web server dedicated to predicting various
+10                                                                                                                                          Fang et al.
+
+
+
+
+Figure 3. Performance comparison of DeepProSite with structure-based methods on 31 proteins with bound and unbound structures.
+
+
+
+
+Figure 4. Positive correlation between the predicted quality of ESMFold as measured by GDT and the performance of DeepProSite as measured by
+AUPRC on Pep_Test_125. Each protein’s corresponding GDT and AUPRC values are denoted by blue scatter points, and a red line represents the average
+GDT and AUPRC for each bin after sorting all proteins according to GDT and dividing them into six bins.
+
+
+
+
+Figure 5. Visualization of predicted binding residues for two cases predicted by DeepProSite and other methods. The results predicted by DeepProSite
+(a), the geometric diagnostic baseline method Transformer (b), PepNN-Struct (c), PepBCL (d), and PepBind (e) are shown for the first protein (PDB ID:
+4L3O, chain A) from Pep_Test_125. The results predicted by DeepProSite (f), Transformer (g), GraphPPIS (h), SPPIDER (i) and ProNA2020 (j) are shown
+for the second protein (PDB ID: 4BVX, chain A) from Pro_Test_315. The TP, FP, and FN are colored in green, red, and yellow, respectively.
+
+
+
+
+binding sites in protein sequences. The web server can be                     prediction, protein–RNA binding site prediction, protein–pro-
+accessed      via     https://inner.wei-group.net/DeepProSite/.               tein binding site prediction, protein–peptide binding site pre-
+Figure 6 displays an instruction manual for the web server.                   diction, and other ligand-specific binding site prediction, such
+Specifically, users can readily submit one or more protein                    as ATP, HEME, and metal ion prediction. The predictions
+sequences in FASTA format and choose from a range of avail-                   can be visualized for proteins available in PDB. The predic-
+able prediction models, including protein–DNA binding site                    tions can also be produced as downloadable text.
+                                                                                                                                                                                                               Protein binding site prediction
+
+
+
+
+Table 7. Performance comparison of DeepProSite and GraphBind on seven ligand-binding test sets.a
+
+                      Rec                                    Pre                                    F1                                     MCC                                 AUC
+
+                      G                   D                  G                   D                  G                  D                   G                  D                G               D
+
+DNA_Test_129          0.676 6 0.027       0.634 6 0.016      0.425 6 0.017       0.513 6 0.014      0.522 6 0.005      0.567 6 0.003       0.499 6 0.004      0.540 6 0.003    0.927 6 0.006   0.939 6 0.001
+RNA_Test_117          0.463 6 0.036       0.493 6 0.044      0.294 6 0.017       0.312 6 0.023      0.358 6 0.008      0.380 6 0.008       0.322 6 0.008      0.347 6 0.004    0.854 6 0.006   0.860 6 0.002
+ATP_Test_41           0.603 6 0.037       0.678 6 0.030      0.666 6 0.035       0.700 6 0.039      0.631 6 0.012      0.687 6 0.007       0.616 6 0.011      0.674 6 0.008    0.939 6 0.006   0.956 6 0.002
+HEM_Test_96           0.775 6 0.032       0.676 6 0.025      0.610 6 0.026       0.656 6 0.024      0.682 6 0.008      0.665 6 0.006       0.661 6 0.008      0.640 6 0.007    0.962 6 0.003   0.958 6 0.002
+Mg2þ_Test_651         0.259 6 0.013       0.251 6 0.019      0.410 6 0.026       0.482 6 0.038      0.317 6 0.006      0.328 6 0.009       0.320 6 0.007      0.342 6 0.004    0.827 6 0.007   0.854 6 0.002
+Ca2þ_Test_515         0.325 6 0.031       0.369 6 0.014      0.563 6 0.040       0.606 6 0.024      0.410 6 0.017      0.458 6 0.005       0.420 6 0.011      0.466 6 0.004    0.863 6 0.012   0.883 6 0.001
+Mn2þ_Test_144         0.563 6 0.044       0.582 6 0.024      0.626 6 0.030       0.649 6 0.031      0.591 6 0.012      0.613 6 0.007       0.588 6 0.011      0.610 6 0.008    0.951 6 0.006   0.953 6 0.002
+  a
+      Predictions of competing methods are provided through GraphBind. Bold values indicate performance that is better than the compared tool. G, GraphBind; D, DeepProSite.
+                                                                                                                                                                                                               11
+12                                                                                                                                         Fang et al.
+
+
+
+
+Figure 6. User interface of the DeepProSite web service. (a and b) Users can enter protein sequences in FASTA format and select the preferred model.
+(c) The prediction results can be visualized for proteins available in PDB. Prediction results can also be downloaded as text file.
+
+
+
+
+4 Conclusion                                                                     Here, we present a topology-aware Graph Transformer-
+Deep learning methods for predicting protein binding sites                    based model, DeepProSite, which utilizes ESMFold-predicted
+provide advantages that are not available in biological experi-               tertiary structures and pretrained protein language models for
+ments for understanding biological activity and drug design.                  protein binding site prediction. By relying solely on protein
+Unfortunately, current prediction methods that depend on se-                  sequences, DeepProSite achieves excellent predictive perfor-
+quence analysis only consider adjacent contextual features in                 mance, surpassing even the most advanced structure-based
+sequences, resulting in inadequate predictive performance.                    methods, thus overcoming the limitations associated with
+Additionally, methods based on protein structure are often                    both existing sequence-based and structure-based methods.
+not applicable to a wide range of proteins due to inadequate                  We also show that when predicting unbound structures, the
+                                                                              accuracy of competing structure-based methods largely
+information on their tertiary structures.
+Protein binding site prediction                                                                                                           13
+
+
+decreases, whereas DeepProSite maintains comparable perfor-         Data availability
+mance as a predictor based solely on sequence, further dem-         The DeepProSite web server can be accessed at https://inner.
+onstrating the benefit of the unbiased training process using       wei-group.net/DeepProSite/. The datasets and source codes of
+sequence only. In summary, the superior performance of              DeepProSite are available at https://github.com/WeiLab-
+DeepProSite compared to the state of the art is attributed to       Biology/DeepProSite.
+three factors: (i) the high-quality structure predicted by
+ESMFold, (ii) the pretrained protein language model offers a
+powerful representation that enhances the quality of predic-        References
+tions, and (iii) the structure-aware Graph Transformer effec-       Abdin O, Wen H, Kim PM. Sequence and structure based deep learning
+tively identifies and predicts binding residue patterns, thus          models for the identiﬁcation of peptide binding sites. Adv Neural Inf
+contributing to the overall efficiency of the approach.                Process Syst 2020;33.
+   Despite the benefits of the DeepProSite method, certain          Babu MM, van der Lee R, de Groot NS et al. Intrinsically disordered
+aspects of our approach can be improved. For example, by               proteins: regulation and disease. Curr Opin Struct Biol 2011;21:
+                                                                       432–40.
+utilizing protein primary sequences to construct heterogeneity
+                                                                    Baek M, DiMaio F, Anishchenko I et al. Accurate prediction of protein
+maps, the model’s robustness to varying structure prediction           structures and interactions using a three-track neural network.
+qualities can be enhanced. In addition, our method is limited          Science 2021;373:871–6.
+to identifying possible protein binding residues based only on      Batra J, Hultquist JF, Liu D et al. Protein interaction mapping identiﬁes
+protein-related information, and cannot predict the binding            RBBP6 as a negative regulator of Ebola virus replication. Cell 2018;
+pattern of specific ligands. These issues will be improved in fu-      175:1917–30.e13.
+ture work.                                                          Berman HM, Westbrook J, Feng Z et al. The protein data bank. Nucleic
+   In summary, our method can provide valuable insights for            Acids Res 2000;28:235–42.
+                                                                    Bertolazzi P, Guerra C, Liuzzi G et al. Predicting protein-ligand and
+studying protein–protein/peptide binding patterns, pathogenic
+                                                                       protein-peptide interfaces. Eur Phys J Plus 2014;129:1–10.
+mechanisms of mutations, and drug development. For in-              Brettner LM, Masel J. Protein stickiness, rather than number of func-
+stance, some diseases are caused by mutations resulting in             tional protein-protein interactions, predicts expression noise and
+alterations in protein–protein/peptide binding sites, which            plasticity in yeast. BMC Syst Biol 2012;6:1–10.
+lead to abnormal protein functions. Understanding the char-         Bruzzoni-Giovanelli H, Alezra V, Wolff N et al. Interfering peptides tar-
+acteristics of these sites and their effects upon mutation can         geting protein-protein interactions: the next generation of drugs?
+help reveal these pathogenic mechanisms. In addition, the pre-         Drug Discov Today 2018;23:272–85.
+                                                                    Chen J, Xie Z-R, Wu Y et al. Understand protein functions by compar-
+diction of protein–protein/peptide binding sites can provide
+                                                                       ing the similarity of local structural environments. Biochim Biophys
+valuable information for drug development, including design-           Acta Proteins Proteom 2017;1865:142–52.
+ing more precise targets and improving drug selectivity and         Chen J, Zheng S, Song Y, et al. Learning attributed graph representa-
+affinity. Such predictions can also be used to study protein in-       tions with communicative message passing transformer. arXiv,
+teraction networks and biological signalling to further under-         arXiv:08773, 2021.
+stand the biological functions of proteins. In the future, we       Chen J, Zheng S, Zhao H et al. Structure-aware protein solubility pre-
+intend to enhance the Graph Transformer’s design and incor-            diction from sequence through graph convolutional network and
+                                                                       predicted contact map. J Cheminform 2021;13:7.
+porate multitask learning to expand its application to various
+                                                                    Chen L, Tan X, Wang D et al. TransformerCPI: improving compound-
+other domains. This involves predicting the binding sites of           protein interaction prediction by sequence-based deep learning with
+proteins with other ligands and identifying functional sites of        self-attention mechanism and label reversal experiments.
+proteins, such as methylation sites, phosphorylation sites, and        Bioinformatics 2020;36:4406–14.
+allosteric sites.                                                   Clare DF, Clary D. Computational studies of protein–peptide interac-
+                                                                       tions with systematic mutation of residues. Mol Phys 2004;102:
+                                                                       939–51.
+Supplementary data                                                  Davenport AP, Scully CCG, de Graaf C et al. Advances in therapeutic
+                                                                       peptides targeting G protein-coupled receptors. Nat Rev Drug
+Supplementary data are available at Bioinformatics online.             Discov 2020;19:389–413.
+                                                                    De Las Rivas J, Fontanillo C. Protein–protein interaction networks:
+                                                                       unraveling the wiring of molecular machines within the cell. Brief
+Conflict of interest                                                   Funct Genomics 2012;11:489–96.
+None declared.                                                      Devlin J, Chang M W, Lee K, et al. Bert: Pre-training of deep bidirec-
+                                                                       tional transformers for language understanding. arXiv,
+                                                                       arXiv:1810.04805, 2018.
+Funding                                                             Dhole K, Singh G, Pai PP et al. Sequence-based prediction of protein–
+                                                                       protein interaction sites with L1-logreg classiﬁer. J Theor Biol 2014;
+This work was supported by grants from the National Science            348:47–54.
+Foundation of China [Grant No. 32070662, 61832019,                  Dyson HJ, Wright PE. Intrinsically unstructured proteins and their func-
+32030063]; Intergovernmental International Scientific and              tions. Nat Rev Mol Cell Biol 2005;6:197–208.
+Technological Innovation and Cooperation Program of The             Elnaggar A, Heinzinger M, Dallago C et al. ProtTrans: Toward under-
+National Key R&D Program [2023YFE0199200] and Joint                    standing the language of life through self-supervised learning. IEEE
+                                                                       Trans Pattern Anal Mach Intell 2022;44:7112–27.
+Research Funds for Medical and Engineering and Scientific
+                                                                    Fosgerau K, Hoffmann T. Peptide therapeutics: current status and future
+Research at Shanghai Jiao Tong University [YG2021ZD02].                directions. Drug Discov Today 2015;20:122–8.
+The computations were partially performed at the Pengcheng          Gainza P, Sverrisson F, Monti F et al. Deciphering interaction ﬁnger-
+Lab. and the Center for High-Performance Computing,                    prints from protein molecular surfaces using geometric deep learn-
+Shanghai Jiao Tong University.                                         ing. Nat Methods 2020;17:184–92.
+14                                                                                                                                           Fang et al.
+
+
+Guilliam TA, Brissett NC, Ehlinger A et al. Molecular basis for PrimPol       Rigden DJ, From Protein Structure to Function with Bioinformatics.
+   recruitment to replication forks by RPA. Nat Commun 2017;8:                    Berlin: Springer, 2009.
+   15222.                                                                     Rubinstein M, Niv MY. Peptidic modulators of protein-protein interac-
+Hammes GG, Chang Y-C, Oas TG et al. Conformational selection or in-               tions: progress and challenges in computational design. Biopolymers
+   duced ﬁt: a ﬂux description of reaction mechanism. Proc Nat Acad               2009;91:505–13.
+   Sci USA 2009;106:13737–41.                                                 Shoemaker BA, Panchenko AR. Deciphering protein–protein interac-
+Hermann JC, Marti-Arbona R, Fedorov AA et al. Structure-based activ-              tions. Part I. Experimental techniques and databases. PLoS Comput
+   ity prediction for an enzyme of unknown function. Nature 2007;                 Biol 2007;3:e42.
+   448:775–9.                                                                 Steinegger M, Mirdita M, Söding J et al. Protein-level assembly increases
+Hu J, Li Y, Zhang Y et al. ATPbind: accurate protein–ATP binding site             protein sequence recovery from metagenomic samples manyfold.
+   prediction by combining sequence-proﬁling and structure-based                  Nat Methods 2019;16:603–6.
+   comparisons. J Chem Inf Model 2018;58:501–10.                              Suzek BE, Wang Y, Huang H et al.; UniProt Consortium. UniRef clus-
+Hu X, Dong Q, Yang J et al. Recognizing metal and acid radical ion-               ters: a comprehensive and scalable alternative for improving se-
+   binding sites by integrating ab initio modeling with template-based            quence similarity searches. Bioinformatics 2015;31:926–32.
+   transferals. Bioinformatics 2016;32:3260–9.                                Taherzadeh G, Yang Y, Zhang T et al. Sequence-based prediction
+Huynh DQ. Metrics for 3D rotations: comparison and analysis. J Math               of protein-peptide binding sites using support vector machine.
+   Imaging Vis 2009;35:155–64.                                                    J Comput Chem 2016;37:1223–9.
+Hwang H, Pierce B, Mintseris J et al. Protein–protein docking bench-          Taherzadeh G, Zhou Y, Liew AW-C et al. Structure-based prediction of
+   mark version 3.0. Prot Structure Funct Bioinform 2008;73:705–9.                protein-peptide     binding     regions   using     random      Forest.
+Ingraham J, Garg V, Barzilay R et al. Generative models for graph-                Bioinformatics 2018;34:477–84.
+   based protein design. Adv Neural Inf Process Syst 2019;32.                 Terentiev AA, Moldogazieva NT, Shaitan KV et al. Dynamic proteomics
+Jumper J, Evans R, Pritzel A et al. Highly accurate protein structure pre-        in modeling of the living cell. Protein-protein interactions.
+   diction with AlphaFold. Nature 2021;596:583–9.                                 Biochemistry (Mosc) 2009;74:1586–607.
+Kabsch W, Sander C. Dictionary of protein secondary structure: pattern        Tovar C, Rosinski J, Filipovic Z et al. Small-molecule MDM2 antago-
+   recognition of hydrogen-bonded and geometrical features.                       nists reveal aberrant p53 signaling in cancer: implications for ther-
+   Biopolymers 1983;22:2577–637.                                                  apy. Proc Natl Acad Sci USA 2006;103:1888–93.
+Kortemme T, Joachimiak LA, Bullock AN et al. Computational redesign           Tubiana J, Schneidman-Duhovny D, Wolfson HJ et al. ScanNet: an in-
+   of protein-protein interaction speciﬁcity. Nat Struct Mol Biol 2004;           terpretable geometric deep learning model for structure-based pro-
+   11:371–9.
+                                                                                  tein binding site prediction. Nat Methods 2022;19:730–9.
+Krapp LF, Abriata LA, Cortés Rodriguez F et al. PeSTo: parameter-free
+                                                                              Valkov E, Muthukumar S, Chang C-T et al. Structure of the Dcp2-Dcp1
+   geometric deep learning for accurate prediction of protein binding
+                                                                                  mRNA-decapping complex in the activated conformation. Nat
+   interfaces. Nat Commun 2023;14:2175.
+                                                                                  Struct Mol Biol 2016;23:574–9.
+Kuzmanov U, Emili A. Protein-protein interaction networks: probing
+                                                                              Vaswani A, Shazeer N, Parmar N et al. Attention is all you need. Adv
+   disease mechanisms using model systems. Genome Med 2013;5:37.
+                                                                                  Neural Inf Process Syst 2017;30:5998–6008.
+Lau JL, Dunn MK. Therapeutic peptides: historical perspectives, current
+                                                                              Vlieghe P, Lisowski V, Martinez J et al. Synthetic therapeutic peptides:
+   development trends, and future directions. Bioorg Med Chem 2018;
+                                                                                  science and market. Drug Discov Today 2010;15:40–56.
+   26:2700–7.
+                                                                              Wang R, Jin J, Zou Q et al. Predicting protein-peptide binding
+Lavi A, Ngan CH, Movshovitz-Attias D et al. Detection of peptide-
+                                                                                  residues via interpretable deep learning. Bioinformatics 2022;38:
+   binding sites on protein surfaces: the ﬁrst step toward the modeling
+                                                                                  3351–60.
+   and targeting of peptide-mediated interactions. Proteins 2013;81:
+                                                                              Wang S, Chen W, Han P et al. RGN: residue-Based graph attention and
+   2096–105.
+                                                                                  convolutional network for protein–protein interaction site predic-
+Lee H, Heo L, Lee MS et al. GalaxyPepDock: a protein–peptide docking
+   tool based on interaction similarity and energy optimization. Nucleic          tion. J Chem Inform Model 2022;62:5961–74.
+                                                                              Wardah W, Dehzangi A, Taherzadeh G et al. Predicting protein-peptide
+   Acids Res 2015;43:W431–5.
+Li Y, Golding GB, Ilie L et al. DELPHI: accurate deep ensemble model              binding sites with a deep convolutional neural network. J Theor Biol
+   for protein interaction sites prediction. Bioinformatics 2021;37:              2020;496:110278.
+   896–904.                                                                   Wells JA, McClendon CL. Reaching for high-hanging fruit in drug dis-
+Lin Z, Akin H, Rao R et al. Evolutionary-scale prediction of atomic-              covery at protein–protein interfaces. Nature 2007;450:1001–9.
+   level protein structure with a language model. Science 2023;379:           Wodak SJ, Vlasblom J, Turinsky AL et al. Protein–protein interaction
+   1123–30.                                                                       networks: the puzzling riches. Curr Opin Struct Biol 2013;23:
+London N, Raveh B, Schueler-Furman O et al. Modeling peptide-                     941–53.
+   protein interactions. Methods Mol Biol 2012;857:375–98.                    Xia C-Q, Pan X, Shen H-B et al. Protein–ligand binding residue predic-
+Murakami Y, Mizuguchi K. Applying the naı̈ve Bayes classiﬁer with ker-            tion enhancement through hybrid deep heterogeneous learning of se-
+   nel density estimation to the prediction of protein–protein interac-           quence and structure data. Bioinformatics 2020;36:3018–27.
+   tion sites. Bioinformatics 2010;26:1841–8.                                 Xia Y, Xia C-Q, Pan X et al. GraphBind: protein structural context em-
+Orengo CA, Michie AD, Jones S et al. CATH—a hierarchic classiﬁcation              bedded rules learned by hierarchical graph neural networks for rec-
+   of protein domain structures. Structure 1997;5:1093–108.                       ognizing nucleic-acid-binding residues. Nucleic Acids Res 2021;49:
+Pawson T, Nash P. Assembly of cell regulatory systems through protein             e51.
+   interaction domains. Science 2003;300:445–52.                              Yang J, Roy A, Zhang Y et al. BioLiP: a semi-manually curated database
+Penna G, Amuchastegui S, Cossetti C et al. Spontaneous and prostatic              for biologically relevant ligand-protein interactions. Nucleic Acids
+   steroid binding protein peptide-induced autoimmune prostatitis in              Res 2013a;41:D1096–103.
+   the nonobese diabetic mouse. J Immunol 2007;179:1559–67.                   Yang J, Roy A, Zhang Y et al. Protein–ligand binding site recognition using
+Petsalaki E, Stark A, Garcıa-Urdiales E et al. Accurate prediction of pep-       complementary binding-speciﬁc substructure comparison and sequence
+   tide binding sites on protein surfaces. PLoS Comput Biol 2009;5:               proﬁle alignment. Bioinformatics 2013b;29:2588–95.
+   e1000335.                                                                  Yang Y, Zhan J, Zhao H et al. A new size-independent score for pair-
+Porollo A, Meller J. Prediction-based ﬁngerprints of protein–protein              wise protein structure alignment and its application to structure clas-
+   interactions. Prot Struct Fun Bioinform 2007;66:630–45.                        siﬁcation and nucleic-acid binding prediction. Prot Struc Func
+Qiu J, Bernhofer M, Heinzinger M et al. ProNA2020 predicts protein–               Bioinform 2012;80:2080–8.
+   DNA, protein–RNA, and protein–protein binding proteins and resi-           Ying C et al. Do transformers really perform badly for graph representa-
+   dues from sequence. J Mol Biol 2020;432:2428–43.                               tion? Adv Neural Inf Process Syst 2021;34:28877–88.
+Protein binding site prediction                                                                                                                     15
+
+
+Yu D-J, Hu J, Yang J et al. Designing template-free predictor for targeting    Zhang J, Kurgan L. SCRIBER: accurate and partner type-speciﬁc predic-
+   protein-ligand binding sites with classiﬁer ensemble and spatial cluster-      tion of protein-binding residues from proteins sequences.
+   ing. IEEE ACM Trans Comput Biol Bioinform 2013;10:994–1008.                    Bioinformatics 2019;35:i343–53.
+Yuan Q, Chen J, Zhao H et al. Structure-aware protein-protein interac-         Zhang QC, Petrey D, Deng L et al. Structure-based prediction of
+   tion site prediction using deep graph convolutional network.                   protein–protein interactions on a genome-wide scale. Nature 2012;
+   Bioinformatics 2021;38:125–32.                                                 490:556–60.
+Yuan Q, Chen S, Rao J et al. AlphaFold2-aware protein-DNA binding              Zhao Z, Peng Z, Yang J et al. Improving sequence-based predic-
+   site prediction using graph transformer. Brief Bioinform 2022;23:              tion of protein-peptide binding residues by introducing intrinsic
+   bbab564.                                                                       disorder and a consensus method. J Chem Inf Model 2018;58:
+Zemla A. LGA: a method for ﬁnding 3D similarities in protein struc-               1459–68.
+   tures. Nucleic Acids Res 2003;31:3370–4.                                    Zheng S, Rao J, Zhang Z et al. Predicting retrosynthetic reactions using
+Zeng M, Zhang F, Wu F-X et al. Protein–protein interaction site predic-           self-corrected transformer neural networks. J Chem Inf Model 2020;
+   tion through combining local and global features with deep neural              60:47–55.
+   networks. Bioinformatics 2020;36:1114–20.                                   Zhu Y-H, Hu J, Song X-N et al. DNAPred: accurate identiﬁcation of
+Zhang B, Li J, Quan L et al. Sequence-based prediction of protein-                DNA-binding sites from protein sequence by ensembled hyperplane-
+   protein interaction sites by simpliﬁed long short-term memory net-             distance-based support vector machines. J Chem Inf Model 2019;59:
+   work. Neurocomputing 2019;357:86–100.                                          3057–71.
+
