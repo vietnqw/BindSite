@@ -28,14 +28,30 @@ Verify that your environment and CUDA are correctly configured:
 uv run bindsite info
 ```
 
+### Datasets
+Download benchmark FASTA files:
+```bash
+uv run bindsite data download
+```
+
+Verify FASTA integrity (within each task):
+```bash
+uv run bindsite data verify
+```
+
+Data layout:
+- `data/PEP/{fasta,csv,pdb}`
+- `data/PRO/{fasta,csv,pdb}`
+- Only `.fa` files are stored now (`csv` is reserved).
+
 ### 3D Structure Prediction (Folding)
 Predict protein 3D structures from FASTA sequences using ESMFold:
 ```bash
-uv run bindsite fold -i data/fasta/PRO_Test_60.fa
+uv run bindsite fold -i data/PRO/fasta/PRO_Test_60.fa -o data/PRO/pdb
 ```
 Options:
 - `-i, --input-fasta`: Path to one or more FASTA files. Supports single-line and DeepProSite 3-line formats.
-- `-o, --output-dir`: Output directory for `.pdb` files (default: `data/pdb`).
+- `-o, --output-dir`: Output directory for `.pdb` files (default: `data/PRO/pdb`).
 - `--model-name`: Specify the ESMFold model version (default: `facebook/esmfold_v1`).
 
 ### Predict Binding Sites

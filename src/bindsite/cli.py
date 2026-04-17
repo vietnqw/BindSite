@@ -22,6 +22,8 @@ app = typer.Typer(
     help="BindSite: A tool for training, evaluation, and prediction of protein binding sites inspired by DeepProSite.",
     no_args_is_help=True
 )
+data_app = typer.Typer(help="Dataset management commands.")
+app.add_typer(data_app, name="data")
 
 @app.command()
 def info():
@@ -39,7 +41,7 @@ def fold(
         ..., "--input-fasta", "-i", help="One or many .fa files to process."
     ),
     output_dir: Path = typer.Option(
-        "data/pdb", "--output-dir", "-o", help="Output directory for predicted .pdb files."
+        "data/PRO/pdb", "--output-dir", "-o", help="Output directory for predicted .pdb files."
     ),
     model_name: str = typer.Option(
         "facebook/esmfold_v1", "--model-name", "-m", help="ESMFold model version to use."
@@ -61,6 +63,48 @@ def predict(pdb_path: str):
     """Placeholder for binding site prediction."""
     typer.echo(f"Predicting binding sites for: {pdb_path}")
     typer.echo("Not implemented yet.")
+
+
+@data_app.command("download")
+def data_download(
+    data_root: Path = typer.Option(
+        "data", "--data-root", help="Root data directory to store task-specific datasets."
+    ),
+):
+    """Download and build benchmark datasets under task-specific folders."""
+    from bindsite.data import download_benchmark_datasets
+
+    raise typer.Exit(code=download_benchmark_datasets(data_root=data_root))
+
+
+@data_app.command("verify")
+def data_verify(
+    data_root: Path = typer.Option(
+        "data", "--data-root", help="Root data directory containing task-specific FASTA datasets."
+    ),
+    task: str = typer.Option(
+        "all",
+        "--task",
+        "-t",
+        help="Task scope for integrity checks: all, pep, or pro. "
+             "Conflicts across different tasks are intentionally ignored.",
+    ),
+):
+    """Verify FASTA integrity within each task (PEP and/or PRO)."""
+    from bindsite.data import verify_fasta_integrity
+
+    task_key = task.strip().lower()
+    if task_key == "all":
+        tasks = ("PEP", "PRO")
+    elif task_key == "pep":
+        tasks = ("PEP",)
+    elif task_key == "pro":
+        tasks = ("PRO",)
+    else:
+        typer.echo("Invalid --task value. Use one of: all, pep, pro.", err=True)
+        raise typer.Exit(code=2)
+
+    raise typer.Exit(code=verify_fasta_integrity(data_root=data_root, tasks=tasks))
 
 if __name__ == "__main__":
     app()

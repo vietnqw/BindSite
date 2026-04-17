@@ -13,7 +13,6 @@ wheels/
 /local/
 
 # Data files (large, tracked separately)
-/data/*
-!/data/fasta/
+/data/
 /features/
 /output/
