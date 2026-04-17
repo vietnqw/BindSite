@@ -106,5 +106,20 @@ def data_verify(
 
     raise typer.Exit(code=verify_fasta_integrity(data_root=data_root, tasks=tasks))
 
+
+@data_app.command("fasta-to-csv")
+def data_fasta_to_csv(
+    input_fasta: Path = typer.Option(
+        ..., "--input-fasta", "-i", help="Input 3-line FASTA file (.fa)."
+    ),
+    output_csv: Path = typer.Option(
+        ..., "--output-csv", "-o", help="Output CSV file path."
+    ),
+):
+    """Convert one FASTA dataset file to CSV (ID,sequence,label)."""
+    from bindsite.data import export_fasta_to_csv
+
+    raise typer.Exit(code=export_fasta_to_csv(input_fasta=input_fasta, output_csv=output_csv))
+
 if __name__ == "__main__":
     app()

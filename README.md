@@ -39,10 +39,14 @@ Verify FASTA integrity (within each task):
 uv run bindsite data verify
 ```
 
+Convert one FASTA file to CSV (`ID,sequence,label`):
+```bash
+uv run bindsite data fasta-to-csv -i data/PRO/fasta/PRO_Test_60.fa -o data/PRO/csv/PRO_Test_60.csv
+```
+
 Data layout:
 - `data/PEP/{fasta,csv,pdb}`
 - `data/PRO/{fasta,csv,pdb}`
-- Only `.fa` files are stored now (`csv` is reserved).
 
 ### 3D Structure Prediction (Folding)
 Predict protein 3D structures from FASTA sequences using ESMFold:

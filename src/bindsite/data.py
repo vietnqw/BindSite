@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import csv
 import sys
 import urllib.error
 import urllib.request
@@ -304,3 +305,27 @@ def verify_fasta_integrity(
                 print(err, file=sys.stderr)
 
     return 0 if all_ok else 1
+
+
+def export_fasta_to_csv(input_fasta: Path, output_csv: Path) -> int:
+    """Convert DeepProSite 3-line FASTA into CSV with columns ID,sequence,label."""
+    if not input_fasta.exists():
+        print(f"ERROR: input FASTA does not exist: {input_fasta}", file=sys.stderr)
+        return 1
+
+    try:
+        records = _parse_three_line_fasta_file(input_fasta)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    with output_csv.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.writer(handle)
+        writer.writerow(["ID", "sequence", "label"])
+        for record in records:
+            label_list_repr = "[" + ", ".join(record.labels) + "]"
+            writer.writerow([record.seq_id, record.sequence, label_list_repr])
+
+    print(f"Wrote {len(records)} rows to {output_csv}")
+    return 0
