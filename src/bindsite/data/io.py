@@ -32,6 +32,28 @@ def parse_3line_fasta(path: Path) -> list[BindingRecord]:
         records.append(BindingRecord(seq_id=header[1:], sequence=sequence, labels=labels))
     return records
 
+def load_records_from_csv(path: Path) -> list[BindingRecord]:
+    """Loads BindingRecord objects from a CSV file (created by export-csv)."""
+    import pandas as pd
+    if not path.exists():
+        logger.error(f"CSV file not found: {path}")
+        return []
+        
+    df = pd.read_csv(path)
+    records = []
+    for _, row in df.iterrows():
+        # Labels in CSV might be in format "[0, 1, 0]"
+        label_raw = str(row['label'])
+        # Clean up brackets and commas to get back to "010"
+        labels = "".join(c for c in label_raw if c in "01")
+        
+        records.append(BindingRecord(
+            seq_id=str(row['ID']), 
+            sequence=str(row['sequence']), 
+            labels=labels
+        ))
+    return records
+
 def extract_ca_coordinates(pdb_path: Path) -> np.ndarray:
     """Extracts Alpha-Carbon coordinates from a PDB file."""
     coords = []

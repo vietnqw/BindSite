@@ -41,19 +41,19 @@ uv run bindsite features extract --data-dir data/PRO
 ```
 
 ### 4. Training
-Train the model using 5-fold cross-validation:
+Train the 5-fold ensemble model using a CSV manifest:
 ```bash
-uv run bindsite train --task PRO --fasta data/PRO/fasta/PRO_Train_335.fa
+uv run bindsite train --data-dir data/PRO --train-data data/PRO/csv/PRO_Train_335.csv
 ```
 
 ### 5. Evaluation & Prediction
-Evaluate the ensemble model on a test set or predict on a single protein:
+Evaluate the ensemble model on a test set (CSV) or predict on a single protein:
 ```bash
 # Evaluate ensemble on test set
-uv run bindsite evaluate --task PRO --fasta data/PRO/fasta/PRO_Test_125.fa
+uv run bindsite evaluate --data-dir data/PRO --eval-data data/PRO/csv/PRO_Test_125.csv
 
 # Predict on a single structural input
-uv run bindsite predict --pdb path/to/protein.pdb --sequence "MAV..."
+uv run bindsite predict --pdb protein.pdb --sequence "MAV..." --weights-dir data/PRO/weights
 ```
 
 ## Project Structure

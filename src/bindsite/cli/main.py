@@ -51,21 +51,30 @@ def fold(
 
 @app.command("train")
 def train(
-    task: str = typer.Option("PRO", "--task", help="Task name (PRO or PEP)."),
-    fasta_file: Path = typer.Option(..., "--fasta", help="3-line FASTA training set."),
-    data_root: Path = typer.Option("data", "--data-root", help="Root data directory."),
+    data_dir: Path = typer.Option("data/PRO", "--data-dir", help="Path to task directory."),
+    train_data: List[Path] = typer.Option(..., "--train-data", help="Paths to one or more training CSV files."),
+    output_dir: Path = typer.Option("output/PRO", "--output-dir", help="Where to save model weights."),
     epochs: int = typer.Option(DEFAULT_EPOCHS, "--epochs"),
     batch_size: int = typer.Option(DEFAULT_BATCH_SIZE, "--batch-size"),
-    output_dir: Path = typer.Option("output", "--output-dir"),
-    fold_idx: int = typer.Option(0, "--fold", help="Specific fold (0-4) or -1 for all.")
+    fold_idx: int = typer.Option(-1, "--fold", help="Specific fold (0-4) or -1 for all (default).")
 ):
     """Train DeepProSite model using 5-fold cross-validation."""
     from sklearn.model_selection import KFold
-    from ..data.io import parse_3line_fasta
+    from ..data.io import load_records_from_csv
     from ..tasks.training import run_training_fold
     
     output_dir.mkdir(parents=True, exist_ok=True)
-    proteins = parse_3line_fasta(fasta_file)
+    
+    proteins = []
+    for csv_file in train_data:
+        typer.echo(f"Loading data from {csv_file}...")
+        proteins.extend(load_records_from_csv(csv_file))
+        
+    if not proteins:
+        typer.echo("Error: No protein records found in provided CSV(s).")
+        raise typer.Exit(1)
+        
+    typer.echo(f"Total proteins loaded: {len(proteins)}")
     
     config = {
         'node_features': 1038, 'hidden_dim': DEFAULT_HIDDEN_DIM,
@@ -75,36 +84,39 @@ def train(
         'output_dir': output_dir
     }
     
-    feature_dir = Path(data_root) / task / "features"
-    pdb_dir = Path(data_root) / task / "pdb"
+    feature_dir = data_dir / "features"
+    pdb_dir = data_dir / "pdb"
     
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     folds = list(kf.split(proteins))
     
     if fold_idx != -1:
         train_idx, val_idx = folds[fold_idx]
-        train_data = [proteins[i] for i in train_idx]
-        val_data = [proteins[i] for i in val_idx]
-        run_training_fold(fold_idx, train_data, val_data, feature_dir, pdb_dir, config)
+        train_records = [proteins[i] for i in train_idx]
+        val_records = [proteins[i] for i in val_idx]
+        run_training_fold(fold_idx, train_records, val_records, feature_dir, pdb_dir, config)
     else:
         for i, (train_idx, val_idx) in enumerate(folds):
-            train_data = [proteins[i] for i in train_idx]
-            val_data = [proteins[i] for i in val_idx]
-            run_training_fold(i, train_data, val_data, feature_dir, pdb_dir, config)
+            train_records = [proteins[j] for j in train_idx]
+            val_records = [proteins[j] for j in val_idx]
+            run_training_fold(i, train_records, val_records, feature_dir, pdb_dir, config)
 
 
 @app.command("evaluate")
 def evaluate(
-    task: str = typer.Option("PRO", "--task"),
-    fasta_file: Path = typer.Option(..., "--fasta"),
-    data_root: Path = typer.Option("data", "--data-root"),
-    model_dir: Path = typer.Option("output", "--model-dir")
+    data_dir: Path = typer.Option("data/PRO", "--data-dir", help="Path to task directory (e.g. data/PRO)."),
+    eval_data: Path = typer.Option(..., "--eval-data", help="Path to evaluation CSV file."),
+    model_dir: Path = typer.Option("output/PRO", "--model-dir", help="Directory containing trained model folds.")
 ):
     """Evaluate DeepProSite ensemble on a test set."""
-    from ..data.io import parse_3line_fasta
+    from ..data.io import load_records_from_csv
     from ..tasks.evaluation import run_ensemble_evaluation
     
-    proteins = parse_3line_fasta(fasta_file)
+    proteins = load_records_from_csv(eval_data)
+    if not proteins:
+        typer.echo(f"Error: No records found in {eval_data}")
+        raise typer.Exit(1)
+        
     model_paths = list(model_dir.glob("fold_*_best.pt"))
     
     config = {
@@ -114,7 +126,7 @@ def evaluate(
     }
     
     metrics = run_ensemble_evaluation(
-        proteins, Path(data_root) / task / "features", Path(data_root) / task / "pdb", 
+        proteins, data_dir / "features", data_dir / "pdb", 
         model_paths, config
     )
     
