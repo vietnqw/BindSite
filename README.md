@@ -1,65 +1,71 @@
 # BindSite
 
-BindSite is a tool for the training, evaluation, and prediction of protein binding sites. Inspired by DeepProSite, it leverages state-of-the-art structural and sequence-based models to identify key binding regions in proteins.
+BindSite is a modular framework for reproducing research in protein binding site prediction, currently focused on a clean, PyTorch-based implementation of the **DeepProSite** architecture.
 
 ## Installation
 
-This project requires [uv](https://docs.astral.sh/uv/) for environment management.
+Requires [uv](https://docs.astral.sh/uv/) for environment and dependency management.
 
-1. **Clone the repository**:
-   ```bash
-   git clone git@github.com:vietnqw/BindSite.git
-   cd BindSite
-   ```
-
-2. **Setup the environment**:
-   ```bash
-   uv sync
-   ```
-   This will create a virtual environment and install all necessary dependencies, including GPU-optimized PyTorch.
-
-## Usage
-
-BindSite comes with a built-in CLI. You can run it using `uv run`.
-
-### Check Environment
-Verify that your environment and CUDA are correctly configured:
 ```bash
-uv run bindsite info
+git clone git@github.com:vietnqw/BindSite.git
+cd BindSite
+uv sync
 ```
 
-### Datasets
-Download benchmark FASTA files:
+## Basic Workflow
+
+The framework follows a standard pipeline from raw data to binding site prediction.
+
+### 1. Data Preparation
+Download and verify benchmark datasets:
 ```bash
 uv run bindsite data download
-```
-
-Verify FASTA integrity (within each task):
-```bash
 uv run bindsite data verify
 ```
 
-Convert one FASTA file to CSV (`ID,sequence,label`):
+Export FASTA to CSV:
 ```bash
-uv run bindsite data fasta-to-csv -i data/PRO/fasta/PRO_Test_60.fa -o data/PRO/csv/PRO_Test_60.csv
+uv run bindsite data export-csv -i data/PRO/fasta/PRO_Train_335.fa -o data/PRO/csv/PRO_Train_335.csv
 ```
 
-Data layout:
-- `data/PEP/{fasta,csv,pdb}`
-- `data/PRO/{fasta,csv,pdb}`
-
-### 3D Structure Prediction (Folding)
-Predict protein 3D structures from FASTA sequences using ESMFold:
+### 2. Protein Folding
+Generate 3D structures (PDB) from FASTA using ESMFold:
 ```bash
 uv run bindsite fold -i data/PRO/fasta/PRO_Test_60.fa -o data/PRO/pdb
 ```
-Options:
-- `-i, --input-fasta`: Path to one or more FASTA files. Supports single-line and DeepProSite 3-line formats.
-- `-o, --output-dir`: Output directory for `.pdb` files (default: `data/PRO/pdb`).
-- `--model-name`: Specify the ESMFold model version (default: `facebook/esmfold_v1`).
 
-### Predict Binding Sites
-(In development) Run prediction on a PDB file:
+### 3. Feature Extraction
+Extract 1038D features (DSSP structural + ProtT5 sequence embeddings):
 ```bash
-uv run bindsite predict path/to/molecule.pdb
+uv run bindsite features extract --data-root data
 ```
+
+### 4. Training
+Train the model using 5-fold cross-validation:
+```bash
+uv run bindsite train --task PRO --fasta data/PRO/fasta/PRO_Train_335.fa
+```
+
+### 5. Evaluation & Prediction
+Evaluate the ensemble model on a test set or predict on a single protein:
+```bash
+# Evaluate ensemble on test set
+uv run bindsite evaluate --task PRO --fasta data/PRO/fasta/PRO_Test_125.fa
+
+# Predict on a single structural input
+uv run bindsite predict --pdb path/to/protein.pdb --sequence "MAV..."
+```
+
+## Project Structure
+
+- `src/bindsite/cli/`: Modular command-line interface.
+- `src/bindsite/core/`: Centralized configuration and constants.
+- `src/bindsite/data/`: FASTA/PDB parsing and dataset management.
+- `src/bindsite/features/`: DSSP and ProtT5 extraction logic.
+- `src/bindsite/models/`: DeepProSite Graph Transformer implementation.
+- `src/bindsite/tasks/`: Training, evaluation, and inference workflows.
+
+## Citation
+
+If you use this work, please refer to the original DeepProSite paper:
+> **DeepProSite**: A structure-aware protein binding site prediction framework.
