@@ -20,12 +20,7 @@ app.add_typer(features.app, name="features")
 
 @app.command("fold")
 def fold(
-    input_fasta: List[Path] = typer.Option(
-        ..., "--input-fasta", "-i", help="One or many .fa files to process."
-    ),
-    output_dir: Path = typer.Option(
-        ..., "--output-dir", "-o", help="Output directory for predicted .pdb files."
-    ),
+    data_dir: Path = typer.Option(..., "--data-dir", "-d", help="Path to task directory (e.g. data/PRO)."),
     model_name: str = typer.Option(
         "facebook/esmfold_v1", "--model-name", "-m", help="ESMFold model version to use."
     ),
@@ -35,9 +30,22 @@ def fold(
 ):
     """Predict 3D protein structures from FASTA sequences using ESMFold."""
     from ..tasks.folding import ESMFolder
-    typer.echo(f"Starting folding process...")
+    
+    fasta_dir = data_dir / "fasta"
+    output_dir = data_dir / "pdb"
+    
+    if not fasta_dir.exists():
+        typer.echo(f"Error: fasta directory not found in {data_dir}")
+        raise typer.Exit(1)
+        
+    fasta_files = list(fasta_dir.glob("*.fa"))
+    if not fasta_files:
+        typer.echo(f"No .fa files found in {fasta_dir}")
+        raise typer.Exit()
+
+    typer.echo(f"Found {len(fasta_files)} FASTA files. Starting folding process...")
     folder = ESMFolder(model_name=model_name, chunk_size=chunk_size)
-    folder.fold_fasta(fasta_paths=input_fasta, output_dir=output_dir)
+    folder.fold_fasta(fasta_paths=fasta_files, output_dir=output_dir)
     typer.echo(f"Folding completed. Results saved to {output_dir}")
 
 
@@ -120,6 +128,7 @@ def predict(
     pdb_path: Path = typer.Option(..., "--pdb", "-p"),
     sequence: str = typer.Option(..., "--sequence", "-s"),
     model_dir: Path = typer.Option("output", "--model-dir"),
+    weights_dir: Optional[Path] = typer.Option(None, "--weights-dir", help="Directory containing Min/Max_ProtTrans_repr.npy"),
     output: Optional[Path] = typer.Option(None, "--output", "-o")
 ):
     """Predict binding sites for a single protein."""
@@ -135,9 +144,16 @@ def predict(
     # Feature extraction
     dssp_feats = extract_dssp_features(pdb_path, sequence)
     
-    bounds_dir = Path("data/weights")
-    min_val = np.load(bounds_dir / "Min_ProtTrans_repr.npy") if (bounds_dir / "Min_ProtTrans_repr.npy").exists() else None
-    max_val = np.load(bounds_dir / "Max_ProtTrans_repr.npy") if (bounds_dir / "Max_ProtTrans_repr.npy").exists() else None
+    min_val, max_val = None, None
+    if weights_dir and weights_dir.exists():
+        min_path = weights_dir / "Min_ProtTrans_repr.npy"
+        max_path = weights_dir / "Max_ProtTrans_repr.npy"
+        if min_path.exists() and max_path.exists():
+            min_val = np.load(min_path)
+            max_val = np.load(max_path)
+    
+    if min_val is None:
+        typer.echo("Warning: Normalization weights not found. Predictions might be suboptimal.")
     
     prott5 = ProtT5Extractor(min_val=min_val, max_val=max_val)
     prott5_feats = prott5.extract(sequence)

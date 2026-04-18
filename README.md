@@ -31,13 +31,13 @@ uv run bindsite data export-csv -i data/PRO/fasta/PRO_Train_335.fa -o data/PRO/c
 ### 2. Protein Folding
 Generate 3D structures (PDB) from FASTA using ESMFold:
 ```bash
-uv run bindsite fold -i data/PRO/fasta/PRO_Test_60.fa -o data/PRO/pdb
+uv run bindsite fold --data-dir data/PRO
 ```
 
 ### 3. Feature Extraction
 Extract 1038D features (DSSP structural + ProtT5 sequence embeddings):
 ```bash
-uv run bindsite features extract --data-root data
+uv run bindsite features extract --data-dir data/PRO
 ```
 
 ### 4. Training

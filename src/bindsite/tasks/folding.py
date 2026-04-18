@@ -28,7 +28,7 @@ class ESMFolder:
 
         logger.info(f"Loading {model_name} on {self.device}...")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = EsmForProteinFolding.from_pretrained(model_name)
+        self.model = EsmForProteinFolding.from_pretrained(model_name, use_safetensors=True)
         
         if chunk_size > 0:
             self.model.trunk.set_chunk_size(chunk_size)
