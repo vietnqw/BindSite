@@ -7,18 +7,18 @@ BIN_DIR = PROJECT_ROOT / "bin"
 DSSP_BIN = BIN_DIR / "mkdssp"
 
 # --- Biological Constants ---
-# Normalized Mean/STD for Relative Accessible Surface Area (RASA)
-# Based on the paper's 14D DSSP feature definition
-RASA_STD = {
-    'A': (0.32, 0.20), 'R': (0.54, 0.21), 'N': (0.47, 0.21), 'D': (0.47, 0.21),
-    'C': (0.16, 0.17), 'Q': (0.50, 0.21), 'E': (0.52, 0.21), 'G': (0.36, 0.19),
-    'H': (0.35, 0.21), 'I': (0.23, 0.18), 'L': (0.24, 0.18), 'K': (0.54, 0.22),
-    'M': (0.29, 0.19), 'F': (0.20, 0.18), 'P': (0.44, 0.21), 'S': (0.42, 0.21),
-    'T': (0.39, 0.20), 'W': (0.20, 0.18), 'Y': (0.26, 0.19), 'V': (0.26, 0.18)
+# DSSP relative solvent accessibility max values per amino acid, used as
+# ASA / max_ASA normalization (paper/reference implementation).
+RASA_MAX = {
+    "A": 115, "C": 135, "D": 150, "E": 190, "F": 210,
+    "G": 75, "H": 195, "I": 175, "K": 200, "L": 170,
+    "M": 185, "N": 160, "P": 145, "Q": 180, "R": 225,
+    "S": 115, "T": 140, "V": 155, "W": 255, "Y": 230,
 }
 
-# Secondary Structure types (H, B, E, G, I, T, S, P, -)
-SS_TYPES = ['H', 'B', 'E', 'G', 'I', 'T', 'S', 'P', '-']
+# Secondary-structure alphabet used by DSSP (8 states). Missing/unknown
+# residues are represented by an extra 9th position in one-hot vectors.
+SS_TYPES = ["H", "B", "E", "G", "I", "T", "S", "C"]
 
 # --- Model Hyperparameters ---
 DEFAULT_HIDDEN_DIM = 64
@@ -28,7 +28,7 @@ DEFAULT_DROPOUT = 0.2
 DEFAULT_MAX_LEN = 1000
 
 # --- Training Constants ---
-DEFAULT_BATCH_SIZE = 64
+DEFAULT_BATCH_SIZE = 32
 DEFAULT_EPOCHS = 30
 DEFAULT_PATIENCE = 8
 DEFAULT_WARMUP_EPOCHS = 5

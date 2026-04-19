@@ -2,7 +2,7 @@ import subprocess
 import numpy as np
 from pathlib import Path
 from Bio import pairwise2
-from ..core.config import RASA_STD, SS_TYPES, DSSP_BIN
+from ..core.config import RASA_MAX, SS_TYPES, DSSP_BIN
 from ..core.logger import logger
 
 def extract_dssp_features(pdb_path: Path, fasta_seq: str, mkdssp_bin: str = DSSP_BIN):
@@ -32,18 +32,23 @@ def extract_dssp_features(pdb_path: Path, fasta_seq: str, mkdssp_bin: str = DSSP
             break
     
     data_lines = dssp_lines[header_idx + 1:]
-    dssp_data = [] # List of (res_idx, aa, ss, rasa, phi, psi)
+    dssp_data = []
     
     for line in data_lines:
-        if line[13] == '!': continue # Missing residue
-        
+        if len(line) < 115:
+            continue
+        if line[13] in {"!", "*"}:
+            continue
+
         aa = line[13]
-        ss = line[16] if line[16] != ' ' else '-'
+        ss = line[16] if line[16] != " " else "C"
         try:
-            rasa = float(line[35:38].strip())
+            acc = float(line[34:38].strip())
             phi = float(line[103:109].strip())
             psi = float(line[109:115].strip())
-            dssp_data.append({'aa': aa, 'ss': ss, 'rasa': rasa, 'phi': phi, 'psi': psi})
+            max_asa = RASA_MAX.get(aa, 1)
+            rasa = min(100.0, round(acc / max_asa * 100.0)) / 100.0
+            dssp_data.append({"aa": aa, "ss": ss, "rasa": rasa, "phi": phi, "psi": psi})
         except ValueError:
             continue
 
@@ -60,40 +65,32 @@ def extract_dssp_features(pdb_path: Path, fasta_seq: str, mkdssp_bin: str = DSSP
     dssp_ptr = 0
     
     for f_aa, d_aa in zip(aligned_fasta, aligned_dssp):
-        if f_aa == '-': # Insertion in DSSP relative to FASTA (ignore)
-            if d_aa != '-': dssp_ptr += 1
+        if f_aa == "-":
+            if d_aa != "-":
+                dssp_ptr += 1
             continue
-            
-        if d_aa == '-': # Deletion in DSSP (missing structure)
-            # Use neutral/zero features for missing residues
-            feat = [0.0] * 14
+
+        if d_aa == "-":
+            # [sin(phi), cos(phi), sin(psi), cos(psi), rasa, 9x ss-onehot]
+            # For missing residues: neutral angles, zero rasa, unknown ss.
+            feat = [0.0, 1.0, 0.0, 1.0, 0.0] + [0.0] * 8 + [1.0]
         else:
-            # Get data from dssp_data
             data = dssp_data[dssp_ptr]
-            
-            # Torsion angles (sin/cos)
             phi_rad = np.radians(data['phi'])
             psi_rad = np.radians(data['psi'])
-            
-            # Normalized ASA
-            mean, std = RASA_STD.get(data['aa'], (0.0, 1.0))
-            norm_rasa = (data['rasa'] - mean) / std
-            
-            # One-hot SS (9-state)
+
             ss_onehot = [0.0] * 9
-            if data['ss'] in SS_TYPES:
-                ss_onehot[SS_TYPES.index(data['ss'])] = 1.0
-            else:
-                ss_onehot[SS_TYPES.index('-')] = 1.0
-                
+            ss_idx = SS_TYPES.index(data["ss"]) if data["ss"] in SS_TYPES else 8
+            ss_onehot[ss_idx] = 1.0
+
             feat = [
                 np.sin(phi_rad), np.cos(phi_rad),
                 np.sin(psi_rad), np.cos(psi_rad),
-                norm_rasa
+                data["rasa"],
             ] + ss_onehot
-            
+
             dssp_ptr += 1
-            
+
         final_features.append(feat)
 
     return np.array(final_features, dtype=np.float32)

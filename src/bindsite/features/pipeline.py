@@ -7,7 +7,13 @@ from ..core.logger import logger
 
 from ..data.io import parse_3line_fasta
 
-def process_dataset(fasta_path: Path, pdb_dir: Path, output_dir: Path, prott5_extractor: ProtT5Extractor):
+def process_dataset(
+    fasta_path: Path,
+    pdb_dir: Path,
+    output_dir: Path,
+    prott5_extractor: ProtT5Extractor,
+    overwrite: bool = False,
+):
     """Extracts features for all proteins in a FASTA file."""
     output_dir.mkdir(parents=True, exist_ok=True)
     proteins = parse_3line_fasta(fasta_path)
@@ -17,7 +23,7 @@ def process_dataset(fasta_path: Path, pdb_dir: Path, output_dir: Path, prott5_ex
     for record in tqdm(proteins, desc=f"Processing {fasta_path.name}"):
         seq_id, seq = record.seq_id, record.sequence
         out_path = output_dir / f"{seq_id}.npy"
-        if out_path.exists():
+        if out_path.exists() and not overwrite:
             stats["processed"] += 1
             continue
             
@@ -41,8 +47,8 @@ def process_dataset(fasta_path: Path, pdb_dir: Path, output_dir: Path, prott5_ex
                 dssp_feats = dssp_feats[:min_l]
                 prott5_feats = prott5_feats[:min_l]
             
-            # 3. Concatenate (1038D)
-            combined = np.concatenate([dssp_feats, prott5_feats], axis=1)
+            # 3. Concatenate (1038D) in reference order: ProtT5 + DSSP
+            combined = np.concatenate([prott5_feats, dssp_feats], axis=1)
             
             # 4. Save
             np.save(out_path, combined)
@@ -79,7 +85,7 @@ def compute_normalization_bounds(fasta_paths: list[Path], prott5_extractor: Prot
                 
     return global_min, global_max
 
-def run_extraction_pipeline(data_dir: Path, device: str = None):
+def run_extraction_pipeline(data_dir: Path, device: str = None, overwrite: bool = False):
     """Runs extraction for a specific dataset directory."""
     data_dir = Path(data_dir)
     prott5 = ProtT5Extractor(device=device)
@@ -112,5 +118,11 @@ def run_extraction_pipeline(data_dir: Path, device: str = None):
     logger.info(f"Stage 2: Starting extraction for task directory: {data_dir}")
     fasta_files = list(task['fasta_dir'].glob("*.fa"))
     for fasta_file in fasta_files:
-        stats = process_dataset(fasta_file, task['pdb_dir'], task['out_dir'], prott5)
+        stats = process_dataset(
+            fasta_file,
+            task['pdb_dir'],
+            task['out_dir'],
+            prott5,
+            overwrite=overwrite,
+        )
         logger.info(f"Stats for {fasta_file.name}: {stats}")

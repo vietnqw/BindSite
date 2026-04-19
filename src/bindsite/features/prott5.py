@@ -1,7 +1,7 @@
 import torch
 from transformers import T5EncoderModel, T5Tokenizer
 import numpy as np
-import logging
+import re
 from ..core.logger import logger
 
 class ProtT5Extractor:
@@ -26,6 +26,7 @@ class ProtT5Extractor:
 
     def extract(self, sequence: str):
         """Extracts and normalizes embeddings for a single sequence."""
+        sequence = re.sub(r"[UZOB]", "X", sequence)
         # ProtT5 expects space-separated sequences
         seq_spaced = " ".join(list(sequence))
         

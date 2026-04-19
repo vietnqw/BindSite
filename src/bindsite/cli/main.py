@@ -1,4 +1,5 @@
 import typer
+import re
 from pathlib import Path
 from typing import List, Optional
 from . import data, features
@@ -17,6 +18,12 @@ app.add_typer(data.app, name="data")
 app.add_typer(features.app, name="features")
 
 # --- Direct Action Commands (Verbs) ---
+
+
+def _list_fold_weight_paths(model_dir: Path) -> List[Path]:
+    """Return only fold weight files like fold_0.pt, fold_1.pt, ..."""
+    pattern = re.compile(r"^fold_\d+\.pt$")
+    return sorted([p for p in model_dir.glob("fold_*.pt") if pattern.match(p.name)])
 
 @app.command("fold")
 def fold(
@@ -56,7 +63,12 @@ def train(
     output_dir: Path = typer.Option("output/PRO", "--output-dir", help="Where to save model weights."),
     epochs: int = typer.Option(DEFAULT_EPOCHS, "--epochs"),
     batch_size: int = typer.Option(DEFAULT_BATCH_SIZE, "--batch-size"),
-    fold_idx: int = typer.Option(-1, "--fold", help="Specific fold (0-4) or -1 for all (default).")
+    fold_idx: int = typer.Option(-1, "--fold", help="Specific fold (0-4) or -1 for all (default)."),
+    resume: bool = typer.Option(
+        False,
+        "--resume",
+        help="Resume training from saved per-fold resume checkpoints.",
+    ),
 ):
     """Train DeepProSite model using 5-fold cross-validation."""
     from sklearn.model_selection import KFold
@@ -78,11 +90,17 @@ def train(
     
     config = {
         'node_features': 1038, 'hidden_dim': DEFAULT_HIDDEN_DIM,
-        'num_encoder_layers': DEFAULT_NUM_LAYERS, 'dropout': DEFAULT_DROPOUT,
+        'edge_features': 16, 'num_encoder_layers': DEFAULT_NUM_LAYERS,
+        'num_heads': DEFAULT_NUM_HEADS, 'dropout': DEFAULT_DROPOUT,
+        'k_neighbors': 30, 'augment_eps': 0.1,
         'epochs': epochs, 'batch_size': batch_size,
         'warmup_epochs': 5, 'patience': DEFAULT_PATIENCE,
-        'output_dir': output_dir
+        'output_dir': output_dir, 'task': data_dir.name.upper(),
+        'resume': resume,
     }
+
+    task_train_size = {"PRO": 335, "CA": 1550, "MG": 1729, "MN": 547, "METAL": 5469}
+    config['num_samples'] = task_train_size.get(config['task'], len(proteins)) * 5
     
     feature_dir = data_dir / "features"
     pdb_dir = data_dir / "pdb"
@@ -106,33 +124,106 @@ def train(
 def evaluate(
     data_dir: Path = typer.Option("data/PRO", "--data-dir", help="Path to task directory (e.g. data/PRO)."),
     eval_data: Path = typer.Option(..., "--eval-data", help="Path to evaluation CSV file."),
-    model_dir: Path = typer.Option("output/PRO", "--model-dir", help="Directory containing trained model folds.")
+    model_dir: Path = typer.Option("output/PRO", "--model-dir", help="Directory containing trained model folds."),
+    threshold_mode: str = typer.Option(
+        "all",
+        "--threshold-mode",
+        help=(
+            "Decision threshold source for MCC/F1/Pre/Rec/Acc/Spe. "
+            "'all' compares all supported approaches side by side. "
+            "'fixed' uses 0.5 (clean). 'max-mcc' optimizes on the test set to "
+            "match the paper's reporting (optimistic / leaks labels). "
+            "'val-optimal' averages per-fold validation MCC-optimal thresholds "
+            "saved during training (clean compromise)."
+        ),
+    ),
 ):
     """Evaluate DeepProSite ensemble on a test set."""
     from ..data.io import load_records_from_csv
     from ..tasks.evaluation import run_ensemble_evaluation
-    
+
+    if threshold_mode not in {"all", "fixed", "max-mcc", "val-optimal"}:
+        typer.echo(
+            f"Error: --threshold-mode must be one of all, fixed, max-mcc, val-optimal (got {threshold_mode!r})"
+        )
+        raise typer.Exit(2)
+
     proteins = load_records_from_csv(eval_data)
     if not proteins:
         typer.echo(f"Error: No records found in {eval_data}")
         raise typer.Exit(1)
         
-    model_paths = list(model_dir.glob("fold_*_best.pt"))
+    model_paths = _list_fold_weight_paths(model_dir)
+    if not model_paths:
+        typer.echo(f"Error: No fold weight files found in {model_dir} (expected fold_<n>.pt).")
+        raise typer.Exit(1)
     
     config = {
         'node_features': 1038, 'hidden_dim': DEFAULT_HIDDEN_DIM,
-        'num_encoder_layers': DEFAULT_NUM_LAYERS, 'dropout': DEFAULT_DROPOUT,
+        'edge_features': 16, 'num_encoder_layers': DEFAULT_NUM_LAYERS,
+        'num_heads': DEFAULT_NUM_HEADS, 'dropout': DEFAULT_DROPOUT,
+        'k_neighbors': 30, 'augment_eps': 0.1,
         'batch_size': DEFAULT_BATCH_SIZE
     }
     
     metrics = run_ensemble_evaluation(
-        proteins, data_dir / "features", data_dir / "pdb", 
-        model_paths, config
+        proteins, data_dir / "features", data_dir / "pdb",
+        model_paths, config,
+        threshold_mode=threshold_mode,
     )
     
-    typer.echo("\n--- Results ---")
-    for k, v in metrics.items():
-        typer.echo(f"{k.upper()}: {v:.4f}")
+    from rich.console import Console
+    from rich.table import Table
+    from rich.panel import Panel
+
+    console = Console()
+    
+    # Mapping internal keys to descriptive display names
+    metric_names = {
+        'auc': 'Area Under ROC (AUC)',
+        'auprc': 'Area Under PR (AUPRC)',
+        'mcc': 'Matthews Correlation',
+        'f1': 'F1 Score',
+        'pre': 'Precision',
+        'rec': 'Recall (Sensitivity)',
+        'acc': 'Accuracy',
+        'spe': 'Specificity',
+        'threshold': 'Threshold',
+    }
+
+    if threshold_mode == "all":
+        table = Table(title="[bold]DeepProSite Ensemble Performance[/bold]", show_header=True, header_style="bold magenta")
+        table.add_column("Metric", style="cyan", width=25)
+        table.add_column("fixed", justify="right", style="bold green")
+        table.add_column("val-optimal", justify="right", style="bold yellow")
+        table.add_column("max-mcc", justify="right", style="bold magenta")
+        by_mode = metrics["by_mode"]
+        for key, display_name in metric_names.items():
+            table.add_row(
+                display_name,
+                f"{by_mode['fixed'][key]:.4f}",
+                f"{by_mode['val-optimal'][key]:.4f}",
+                f"{by_mode['max-mcc'][key]:.4f}",
+            )
+        subtitle = "all threshold modes"
+    else:
+        table = Table(title="[bold]DeepProSite Ensemble Performance[/bold]", show_header=True, header_style="bold magenta")
+        table.add_column("Metric", style="cyan", width=25)
+        table.add_column("Score", justify="right", style="bold green")
+        for key, display_name in metric_names.items():
+            if key in metrics:
+                table.add_row(display_name, f"{metrics[key]:.4f}")
+        subtitle = f"threshold: {metrics.get('threshold_source', threshold_mode)}"
+
+    console.print("\n")
+    console.print(Panel(
+        table,
+        expand=False,
+        border_style="blue",
+        title="[bold white]Evaluation Complete[/bold white]",
+        subtitle=subtitle,
+    ))
+    console.print("\n")
 
 
 @app.command("predict")
@@ -151,7 +242,10 @@ def predict(
     from ..tasks.inference import run_single_prediction
     from ..data.io import extract_ca_coordinates
     
-    model_paths = list(model_dir.glob("fold_*_best.pt"))
+    model_paths = _list_fold_weight_paths(model_dir)
+    if not model_paths:
+        typer.echo(f"Error: No fold weight files found in {model_dir} (expected fold_<n>.pt).")
+        raise typer.Exit(1)
     
     # Feature extraction
     dssp_feats = extract_dssp_features(pdb_path, sequence)
@@ -171,12 +265,14 @@ def predict(
     prott5_feats = prott5.extract(sequence)
     
     min_l = min(len(dssp_feats), len(prott5_feats))
-    features = np.concatenate([dssp_feats[:min_l], prott5_feats[:min_l]], axis=1)
+    features = np.concatenate([prott5_feats[:min_l], dssp_feats[:min_l]], axis=1)
     coords = extract_ca_coordinates(pdb_path)[:min_l]
     
     config = {
         'node_features': 1038, 'hidden_dim': DEFAULT_HIDDEN_DIM,
-        'num_encoder_layers': DEFAULT_NUM_LAYERS, 'dropout': DEFAULT_DROPOUT
+        'edge_features': 16, 'num_encoder_layers': DEFAULT_NUM_LAYERS,
+        'num_heads': DEFAULT_NUM_HEADS, 'dropout': DEFAULT_DROPOUT,
+        'k_neighbors': 30, 'augment_eps': 0.1,
     }
     
     probs = run_single_prediction(coords, features, model_paths, config)
