@@ -41,19 +41,39 @@ uv run bindsite features extract --data-dir data/PRO
 ```
 
 ### 4. Training
-Train the 5-fold ensemble model using a CSV manifest:
+Train the 5-fold cross-validation ensemble model using a CSV manifest:
 ```bash
-uv run bindsite train --data-dir data/PRO --train-data data/PRO/csv/PRO_Train_335.csv
+# Train all 5 folds
+uv run bindsite train --data-dir data/PRO --train-data data/PRO/csv/PRO_Train_335.csv --output-dir output/PRO
+
+# Train a single fold (0-4)
+uv run bindsite train --data-dir data/PRO --train-data data/PRO/csv/PRO_Train_335.csv --output-dir output/PRO --fold 0
+
+# Resume a fold from its saved checkpoint
+uv run bindsite train --data-dir data/PRO --train-data data/PRO/csv/PRO_Train_335.csv --output-dir output/PRO --fold 1 --resume
 ```
 
+Each fold writes `fold_{k}.pt` (best weights), `fold_{k}.resume.pt` (full training state), and `fold_{k}.threshold.json` (MCC-optimal threshold on that fold's validation split).
+
 ### 5. Evaluation & Prediction
-Evaluate the ensemble model on a test set (CSV) or predict on a single protein:
+Evaluate the ensemble on a test set or predict on a single protein:
 ```bash
-# Evaluate ensemble on test set
-uv run bindsite evaluate --data-dir data/PRO --eval-data data/PRO/csv/PRO_Test_125.csv
+# Evaluate ensemble (all threshold modes, default)
+uv run bindsite evaluate --data-dir data/PRO --eval-data data/PRO/csv/PRO_Test_60.csv
 
 # Predict on a single structural input
 uv run bindsite predict --pdb protein.pdb --sequence "MAV..." --weights-dir data/PRO/weights
+```
+
+The `evaluate` command accepts `--threshold-mode` for the decision threshold used by MCC/F1/Pre/Rec/Acc/Spe (AUC and AUPRC are unaffected):
+
+- `all` *(default)*: compares all modes side by side in one table.
+- `fixed`: threshold = 0.5. Methodologically clean.
+- `max-mcc`: threshold selected on the test predictions to maximize MCC. Matches the paper's reporting convention; leaks labels into threshold selection, so treat as optimistic.
+- `val-optimal`: averages per-fold validation MCC-optimal thresholds saved during training. Clean compromise between the two.
+
+```bash
+uv run bindsite evaluate --data-dir data/PRO --eval-data data/PRO/csv/PRO_Test_60.csv --threshold-mode val-optimal
 ```
 
 ## Project Structure

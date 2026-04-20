@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from ..models.transformer import DeepProSite
+from ..models.graph_transformer import DeepProSite
 
 def run_single_prediction(coords, features, model_paths, config):
     """Predicts probabilities for a single protein structure/feature set."""
@@ -26,9 +26,13 @@ def run_single_prediction(coords, features, model_paths, config):
         for path in model_paths:
             model = DeepProSite(
                 node_features=config['node_features'],
+                edge_features=config.get('edge_features', 16),
                 hidden_dim=config['hidden_dim'],
                 num_encoder_layers=config['num_encoder_layers'],
-                dropout=config['dropout']
+                num_heads=config.get('num_heads', 4),
+                dropout=config['dropout'],
+                k_neighbors=config.get('k_neighbors', 30),
+                augment_eps=config.get('augment_eps', 0.1),
             ).to(device)
             model.load_state_dict(torch.load(path, map_location=device))
             model.eval()

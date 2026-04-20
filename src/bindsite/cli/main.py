@@ -89,6 +89,7 @@ def train(
     typer.echo(f"Total proteins loaded: {len(proteins)}")
     
     config = {
+        'num_samples': len(proteins) * 5,
         'node_features': 1038, 'hidden_dim': DEFAULT_HIDDEN_DIM,
         'edge_features': 16, 'num_encoder_layers': DEFAULT_NUM_LAYERS,
         'num_heads': DEFAULT_NUM_HEADS, 'dropout': DEFAULT_DROPOUT,
@@ -98,9 +99,6 @@ def train(
         'output_dir': output_dir, 'task': data_dir.name.upper(),
         'resume': resume,
     }
-
-    task_train_size = {"PRO": 335, "CA": 1550, "MG": 1729, "MN": 547, "METAL": 5469}
-    config['num_samples'] = task_train_size.get(config['task'], len(proteins)) * 5
     
     feature_dir = data_dir / "features"
     pdb_dir = data_dir / "pdb"
