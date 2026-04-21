@@ -20,14 +20,14 @@ RASA_MAX = {
 # residues are represented by an extra 9th position in one-hot vectors.
 SS_TYPES = ["H", "B", "E", "G", "I", "T", "S", "C"]
 
-def extract_dssp_features(pdb_path: Path, fasta_seq: str, mkdssp_bin: str = "bin/mkdssp"):
+def extract_dssp_features(pdb_path: Path, fasta_seq: str, dssp_bin: str = "bin/mkdssp"):
     """
     Extracts 14D structural features from a PDB file, aligned to a FASTA sequence.
     Features: sin/cos of PHI/PSI (4D), normalized RASA (1D), and one-hot SS (9D).
     """
     try:
         # Run mkdssp and capture output
-        cmd = [str(mkdssp_bin), "-i", str(pdb_path)]
+        cmd = [str(dssp_bin), "-i", str(pdb_path)]
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
         dssp_lines = result.stdout.splitlines()
     except subprocess.CalledProcessError as e:

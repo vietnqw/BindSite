@@ -37,7 +37,7 @@ def prepare_extract(
     pdb_dir: Path = Path("data/pdb"),
     feature_dir: Path = Path("data/features"),
     model_name: str = typer.Option("facebook/esm2_t33_650M_UR50D", help="ESM-2 model name"),
-    dssp_path: str = typer.Option("bin/dssp", help="Path to DSSP executable"),
+    dssp_bin: str = typer.Option("bin/mkdssp", help="Path to DSSP executable"),
     overwrite: bool = typer.Option(False, help="Overwrite existing features"),
 ):
     """Extract residue-level features (ESM-2 embeddings + DSSP)."""
@@ -59,7 +59,7 @@ def prepare_extract(
         pdb_dir=pdb_dir,
         output_dir=feature_dir,
         model_name=model_name,
-        dssp_path=dssp_path,
+        dssp_bin=dssp_bin,
         overwrite=overwrite
     )
     logger.info(f"Features extracted and saved to {feature_dir}")
