@@ -8,11 +8,12 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "biopython>=1.87",
     "numpy>=2.4.4",
     "pandas>=3.0.2",
-    "torch>=2.11.0",
+    "torch>=2.4.0",
     "tqdm>=4.67.3",
-    "transformers>=5.5.4",
+    "transformers==4.49.0",
     "typer>=0.24.1",
 ]
 
@@ -22,3 +23,11 @@ bindsite = "bindsite.cli.main:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[[tool.uv.index]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch" }
