@@ -3,9 +3,9 @@ import torch
 from tqdm import tqdm
 from Bio import SeqIO
 from transformers import EsmTokenizer, EsmForProteinFolding
-import logging
+from bindsite.utils import setup_logger
 
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 class ProteinFolder:
     def __init__(self, model_name="facebook/esmfold_v1"):
