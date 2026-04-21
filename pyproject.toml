@@ -1,0 +1,16 @@
+[project]
+name = "bindsite"
+version = "0.1.0"
+description = "Protein binding site prediction inspired by DeepProSite"
+readme = "README.md"
+authors = [
+    { name = "Viet Ngo Quang", email = "vietnq.work@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.4.4",
+    "pandas>=3.0.2",
+    "torch>=2.11.0",
+    "tqdm>=4.67.3",
+    "transformers>=5.5.4",
+]
