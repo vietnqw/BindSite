@@ -35,13 +35,14 @@ wheels = [
 [[package]]
 name = "bindsite"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "torch" },
     { name = "tqdm" },
     { name = "transformers" },
+    { name = "typer" },
 ]
 
 [package.metadata]
@@ -51,6 +52,7 @@ requires-dist = [
     { name = "torch", specifier = ">=2.11.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
     { name = "transformers", specifier = ">=5.5.4" },
+    { name = "typer", specifier = ">=0.24.1" },
 ]
 
 [[package]]

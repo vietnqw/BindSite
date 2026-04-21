@@ -1,0 +1,18 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Local reference code (original DeepProSite)
+/local/
+
+# Data files (large, tracked separately)
+/data/
+/features/
+/output/
