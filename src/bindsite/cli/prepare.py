@@ -1,11 +1,9 @@
 import typer
 import os
-import logging
 from pathlib import Path
+from bindsite.utils import setup_logger
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 app = typer.Typer(help="Prepare assets for the pipeline (structures, features, datasets)")
 
@@ -19,24 +17,52 @@ def prepare_fold(
     from bindsite.core.folding import ProteinFolder
     
     if not raw_dir.exists():
-        typer.echo(f"Error: Raw directory {raw_dir} does not exist.")
+        logger.error(f"Raw directory {raw_dir} does not exist.")
         raise typer.Exit(code=1)
         
     folder = ProteinFolder(model_name)
     
     fasta_files = list(raw_dir.glob("*.fa"))
     if not fasta_files:
-        typer.echo(f"No .fa files found in {raw_dir}")
+        logger.warning(f"No .fa files found in {raw_dir}")
         return
 
     for fasta_file in fasta_files:        
-        typer.echo(f"Processing {fasta_file.name} -> {pdb_dir}")
+        logger.info(f"Processing {fasta_file.name} -> {pdb_dir}")
         folder.process_fasta(str(fasta_file), str(pdb_dir))
 
 @app.command("extract")
-def prepare_extract():
+def prepare_extract(
+    raw_dir: Path = Path("data/raw"),
+    pdb_dir: Path = Path("data/pdb"),
+    feature_dir: Path = Path("data/features"),
+    model_name: str = typer.Option("facebook/esm2_t33_650M_UR50D", help="ESM-2 model name"),
+    dssp_path: str = typer.Option("bin/dssp", help="Path to DSSP executable"),
+    overwrite: bool = typer.Option(False, help="Overwrite existing features"),
+):
     """Extract residue-level features (ESM-2 embeddings + DSSP)."""
-    typer.echo("Extracting features...")
+    logger.info("Extracting features using ESM-2 and DSSP...")
+    
+    if not raw_dir.exists():
+        logger.error(f"Raw directory {raw_dir} does not exist.")
+        raise typer.Exit(code=1)
+        
+    if not pdb_dir.exists():
+        logger.error(f"PDB directory {pdb_dir} does not exist. Please run fold first.")
+        raise typer.Exit(code=1)
+        
+    from bindsite.features.pipeline import run_extraction_pipeline
+    feature_dir.mkdir(parents=True, exist_ok=True)
+    
+    run_extraction_pipeline(
+        fasta_dir=raw_dir,
+        pdb_dir=pdb_dir,
+        output_dir=feature_dir,
+        model_name=model_name,
+        dssp_path=dssp_path,
+        overwrite=overwrite
+    )
+    logger.info(f"Features extracted and saved to {feature_dir}")
 
 @app.command("dataset")
 def prepare_dataset(
@@ -47,21 +73,21 @@ def prepare_dataset(
     import csv
     
     if not raw_dir.exists():
-        typer.echo(f"Error: Raw directory {raw_dir} does not exist.")
+        logger.error(f"Raw directory {raw_dir} does not exist.")
         raise typer.Exit(code=1)
         
     output_dir.mkdir(parents=True, exist_ok=True)
     
     fasta_files = list(raw_dir.glob("*.fa"))
     if not fasta_files:
-        typer.echo(f"No .fa files found in {raw_dir}")
+        logger.warning(f"No .fa files found in {raw_dir}")
         return
 
     from bindsite.core.data import parse_fasta_3line
 
     for fasta_file in fasta_files:
         output_file = output_dir / f"{fasta_file.stem}.csv"
-        typer.echo(f"Converting {fasta_file.name} -> {output_file.name}")
+        logger.info(f"Converting {fasta_file.name} -> {output_file.name}")
         
         records = parse_fasta_3line(str(fasta_file))
         dataset = []
@@ -88,4 +114,4 @@ def prepare_dataset(
                 writer = csv.DictWriter(f, fieldnames=["ID", "sequence", "label"])
                 writer.writeheader()
                 writer.writerows(dataset)
-            typer.echo(f"Successfully created {output_file}")
+            logger.info(f"Successfully created {output_file}")
